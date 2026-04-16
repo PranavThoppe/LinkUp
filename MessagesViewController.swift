@@ -16,10 +16,6 @@ class MessagesViewController: MSMessagesAppViewController {
 
     private var hostedController: UIViewController?
 
-    /// True while we are actively fighting a Messages-initiated expansion (swipe-up).
-    /// Used to skip teardown/rebuild so the picker UI stays alive during the bounce-back.
-    private var isFightingExpansion = false
-
     // MARK: - Lifecycle
 
     override func viewDidLoad() {
@@ -70,35 +66,13 @@ class MessagesViewController: MSMessagesAppViewController {
 
     override func willTransition(to presentationStyle: MSMessagesAppPresentationStyle) {
         super.willTransition(to: presentationStyle)
-        if presentationStyle == .expanded {
-            // Fight swipe-to-expand: stay compact and keep the hosted view alive.
-            isFightingExpansion = true
-            requestPresentationStyle(.compact)
-            return
-        }
-        // If this compact transition is the bounce-back from our own request, skip teardown.
-        if isFightingExpansion { return }
         removeHostedController()
     }
 
     override func didTransition(to presentationStyle: MSMessagesAppPresentationStyle) {
         super.didTransition(to: presentationStyle)
         guard let conversation = activeConversation else { return }
-        if presentationStyle == .expanded {
-            requestPresentationStyle(.compact)
-            return
-        }
-        // Bounce-back landed back in compact — UI is still alive, nothing to rebuild.
-        if isFightingExpansion {
-            isFightingExpansion = false
-            return
-        }
         presentUI(for: presentationStyle, conversation: conversation)
-    }
-
-    override func viewDidLayoutSubviews() {
-        super.viewDidLayoutSubviews()
-        configureScrollGestures()
     }
 
     // MARK: - UI routing
@@ -119,9 +93,12 @@ class MessagesViewController: MSMessagesAppViewController {
     // MARK: - Compact (creation)
 
     private func presentCompactView(conversation: MSConversation) {
-        let compactView = CompactView { [weak self] schedule in
-            self?.sendSchedule(schedule, conversation: conversation)
-        }
+        let compactView = CompactView(
+            onSend: { [weak self] schedule in
+                self?.sendSchedule(schedule, conversation: conversation)
+            },
+            isScrollable: false
+        )
         embed(SwiftUI: compactView)
     }
 
@@ -176,16 +153,16 @@ class MessagesViewController: MSMessagesAppViewController {
         }
     }
 
-    // MARK: - Expanded (voting) — placeholder for Phase 3
+    // MARK: - Expanded (creation)
 
     private func presentExpandedView(conversation: MSConversation) {
-        // Phase 3: replace with full ExpandedView implementation
-        let placeholder = Text("Voting coming in Phase 3")
-            .foregroundColor(Theme.textPrimary)
-            .font(.system(size: 16, weight: .semibold))
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Theme.background)
-        embed(SwiftUI: placeholder)
+        let expandedView = CompactView(
+            onSend: { [weak self] schedule in
+                self?.sendSchedule(schedule, conversation: conversation)
+            },
+            isScrollable: true
+        )
+        embed(SwiftUI: expandedView)
     }
 
     // MARK: - Unsupported version fallback
@@ -233,39 +210,6 @@ class MessagesViewController: MSMessagesAppViewController {
         hostedController?.view.removeFromSuperview()
         hostedController?.removeFromParent()
         hostedController = nil
-    }
-
-    // MARK: - Scroll-gesture setup
-    //
-    // Messages places a UIPanGestureRecognizer on an ancestor view that expands the
-    // extension when the user swipes up. By calling require(toFail:) we tell every
-    // ancestor pan gesture: "wait until the picker's scroll gesture has failed before
-    // you begin." This means a scroll inside the picker is captured by the ScrollView
-    // and the expansion gesture never fires.  viewDidLayoutSubviews re-runs this on
-    // every layout pass so newly created scroll views (e.g. after a tab switch) are
-    // automatically covered.
-
-    private func configureScrollGestures() {
-        guard let hostedView = hostedController?.view else { return }
-        let scrollViews = allScrollViews(in: hostedView)
-        guard !scrollViews.isEmpty else { return }
-
-        var ancestor: UIView? = view
-        while let v = ancestor {
-            for gr in v.gestureRecognizers ?? [] where gr is UIPanGestureRecognizer {
-                for sv in scrollViews {
-                    gr.require(toFail: sv.panGestureRecognizer)
-                }
-            }
-            ancestor = v.superview
-        }
-    }
-
-    private func allScrollViews(in root: UIView) -> [UIScrollView] {
-        var result: [UIScrollView] = []
-        if let sv = root as? UIScrollView { result.append(sv) }
-        for sub in root.subviews { result.append(contentsOf: allScrollViews(in: sub)) }
-        return result
     }
 
     // MARK: - Helpers

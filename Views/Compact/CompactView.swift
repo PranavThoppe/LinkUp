@@ -3,6 +3,8 @@ import SwiftUI
 struct CompactView: View {
     /// Called when the user taps "Send Schedule". Provides the fully-built Schedule.
     let onSend: (Schedule) -> Void
+    /// True when picker content should allow full scrolling (expanded mode).
+    let isScrollable: Bool
 
     @State private var selectedTab: ScheduleMode = .month
 
@@ -37,9 +39,9 @@ struct CompactView: View {
             Group {
                 switch selectedTab {
                 case .month:
-                    CompactMonthPicker(selectedMonths: $selectedMonths)
+                    CompactMonthPicker(selectedMonths: $selectedMonths, isScrollable: isScrollable)
                 case .week:
-                    CompactWeekPicker(startIso: $weekStartIso, endIso: $weekEndIso)
+                    CompactWeekPicker(startIso: $weekStartIso, endIso: $weekEndIso, isScrollable: isScrollable)
                 case .days:
                     CompactDaysPicker(selectedDatesIso: $selectedDatesIso)
                 }

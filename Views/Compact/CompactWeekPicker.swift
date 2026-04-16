@@ -5,8 +5,10 @@ private let dowLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 struct CompactWeekPicker: View {
     @Binding var startIso: String?
     @Binding var endIso: String?
+    let isScrollable: Bool
 
     private let months: [MonthYear] = buildPickerMonths(count: 16)
+    private var visibleMonths: [MonthYear] { isScrollable ? months : Array(months.prefix(2)) }
     private let todayIso: String = todayISODate()
 
     var body: some View {
@@ -27,16 +29,27 @@ struct CompactWeekPicker: View {
             .padding(.top, 12)
             .padding(.bottom, 6)
 
-            ScrollView(.vertical, showsIndicators: false) {
-                VStack(spacing: 16) {
-                    ForEach(months, id: \.self) { month in
-                        monthBlock(month)
+            Group {
+                if isScrollable {
+                    ScrollView(.vertical, showsIndicators: false) {
+                        monthList(months: visibleMonths)
                     }
+                } else {
+                    monthList(months: visibleMonths)
                 }
-                .padding(.bottom, 20)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    @ViewBuilder
+    private func monthList(months: [MonthYear]) -> some View {
+        VStack(spacing: 16) {
+            ForEach(months, id: \.self) { month in
+                monthBlock(month)
+            }
+        }
+        .padding(.bottom, 20)
     }
 
     @ViewBuilder
