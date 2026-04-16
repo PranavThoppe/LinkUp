@@ -8,26 +8,33 @@ struct CompactWeekPicker: View {
     let isScrollable: Bool
 
     private let months: [MonthYear] = buildPickerMonths(count: 16)
-    private var visibleMonths: [MonthYear] { isScrollable ? months : Array(months.prefix(2)) }
+    /// Compact shows one month so tab bar + Send stay visible; expanded lists all with scrolling.
+    private var visibleMonths: [MonthYear] { isScrollable ? months : Array(months.prefix(1)) }
     private let todayIso: String = todayISODate()
+
+    private var dayRowHeight: CGFloat { isScrollable ? 36 : 28 }
+    private var dayLabelWidth: CGFloat { isScrollable ? 34 : 28 }
+    private var dayLabelHeight: CGFloat { isScrollable ? 30 : 22 }
+    private var dayFontSize: CGFloat { isScrollable ? 12 : 11 }
+    private var dayCornerRadius: CGFloat { isScrollable ? 8 : 6 }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Pick Date Range")
-                .font(.system(size: 18, weight: .bold))
+                .font(.system(size: isScrollable ? 18 : 16, weight: .bold))
                 .foregroundColor(Theme.voteGreenHigh)
 
             // Day-of-week header
             HStack(spacing: 0) {
                 ForEach(dowLabels, id: \.self) { label in
                     Text(label)
-                        .font(.system(size: 11, weight: .bold))
+                        .font(.system(size: isScrollable ? 11 : 10, weight: .bold))
                         .foregroundColor(Theme.textSecondary)
                         .frame(maxWidth: .infinity)
                 }
             }
-            .padding(.top, 12)
-            .padding(.bottom, 6)
+            .padding(.top, isScrollable ? 12 : 8)
+            .padding(.bottom, isScrollable ? 6 : 4)
 
             Group {
                 if isScrollable {
@@ -44,12 +51,12 @@ struct CompactWeekPicker: View {
 
     @ViewBuilder
     private func monthList(months: [MonthYear]) -> some View {
-        VStack(spacing: 16) {
+        VStack(spacing: isScrollable ? 16 : 10) {
             ForEach(months, id: \.self) { month in
                 monthBlock(month)
             }
         }
-        .padding(.bottom, 20)
+        .padding(.bottom, isScrollable ? 20 : 8)
     }
 
     @ViewBuilder
@@ -58,10 +65,10 @@ struct CompactWeekPicker: View {
         let rows = stride(from: 0, to: grid.count, by: 7).map { Array(grid[$0..<min($0 + 7, grid.count)]) }
 
         VStack(alignment: .leading, spacing: 0) {
-            Text("\(monthName(month.month)) \(month.year)")
-                .font(.system(size: 14, weight: .bold))
+            Text("\(monthName(month.month)) \(String(month.year))")
+                .font(.system(size: isScrollable ? 14 : 13, weight: .bold))
                 .foregroundColor(.white)
-                .padding(.bottom, 6)
+                .padding(.bottom, isScrollable ? 6 : 4)
 
             ForEach(0..<rows.count, id: \.self) { rowIdx in
                 HStack(spacing: 0) {
@@ -78,7 +85,7 @@ struct CompactWeekPicker: View {
         if !cell.inMonth {
             Color.clear
                 .frame(maxWidth: .infinity)
-                .frame(height: 36)
+                .frame(height: dayRowHeight)
         } else {
             let iso = toISODate(year: month.year, month: month.month, day: cell.day)
             let isPast = iso < todayIso
@@ -94,9 +101,9 @@ struct CompactWeekPicker: View {
                 if !isPast { handleTap(iso) }
             } label: {
                 Text("\(cell.day)")
-                    .font(.system(size: 12, weight: .heavy))
+                    .font(.system(size: dayFontSize, weight: .heavy))
                     .foregroundColor(isPast ? Color.white.opacity(0.3) : .white)
-                    .frame(width: 34, height: 30)
+                    .frame(width: dayLabelWidth, height: dayLabelHeight)
                     .background(
                         Group {
                             if isEndpoint {
@@ -108,12 +115,12 @@ struct CompactWeekPicker: View {
                             }
                         }
                     )
-                    .cornerRadius(8)
+                    .cornerRadius(dayCornerRadius)
             }
             .buttonStyle(.plain)
             .disabled(isPast)
             .frame(maxWidth: .infinity)
-            .frame(height: 36)
+            .frame(height: dayRowHeight)
         }
     }
 

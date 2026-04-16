@@ -22,40 +22,34 @@ struct CompactDaysPicker: View {
 
             Spacer(minLength: 0)
 
-            // Date picker + Add button
-            VStack(spacing: 10) {
-                Text("Tap to pick a date")
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundColor(Theme.voteGreenHigh)
+            // Date picker centered; Add below (compact popover opens from picker, not over Add)
+            VStack(alignment: .center, spacing: 10) {
+                DatePicker("", selection: $pendingDate, displayedComponents: .date)
+                    .datePickerStyle(.compact)
+                    .labelsHidden()
+                    .colorScheme(.dark)
+                    .accentColor(Theme.voteGreenHigh)
+                    .padding(.horizontal, 8)
+                    .background(Theme.cardBackground)
+                    .cornerRadius(12)
 
-                HStack(spacing: 8) {
-                    DatePicker("", selection: $pendingDate, displayedComponents: .date)
-                        .datePickerStyle(.compact)
-                        .labelsHidden()
-                        .colorScheme(.dark)
-                        .accentColor(Theme.voteGreenHigh)
-                        .padding(.horizontal, 8)
-                        .background(Theme.cardBackground)
-                        .cornerRadius(12)
-
-                    Button {
-                        addDate(pendingIso)
-                    } label: {
-                        Text("Add")
-                            .font(.system(size: 13, weight: .bold))
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 12)
-                            .frame(height: 32)
-                            .background(
-                                selectedDatesIso.contains(pendingIso)
-                                    ? Theme.cardBorder
-                                    : Theme.primaryBlue
-                            )
-                            .cornerRadius(16)
-                    }
-                    .disabled(selectedDatesIso.contains(pendingIso))
+                Button {
+                    addDate(pendingIso)
+                } label: {
+                    Text("Add")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 12)
+                        .frame(height: 32)
+                        .background(
+                            selectedDatesIso.contains(pendingIso)
+                                ? Theme.cardBorder
+                                : Theme.primaryBlue
+                        )
+                        .cornerRadius(16)
                 }
-                .frame(maxWidth: .infinity)
+                .buttonStyle(.plain)
+                .disabled(selectedDatesIso.contains(pendingIso))
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 12)

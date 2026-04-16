@@ -3,30 +3,17 @@ import SwiftUI
 struct CompactView: View {
     /// Called when the user taps "Send Schedule". Provides the fully-built Schedule.
     let onSend: (Schedule) -> Void
+    @ObservedObject var draft: ComposerDraft
     /// True when picker content should allow full scrolling (expanded mode).
     let isScrollable: Bool
 
-    @State private var selectedTab: ScheduleMode = .month
-
-    // Month state
-    @State private var selectedMonths: [MonthYear] = {
-        let now = Date()
-        let cal = Calendar(identifier: .gregorian)
-        return [MonthYear(month: cal.component(.month, from: now) - 1, year: cal.component(.year, from: now))]
-    }()
-
-    // Week state
-    @State private var weekStartIso: String? = nil
-    @State private var weekEndIso: String? = nil
-
-    // Days state
-    @State private var selectedDatesIso: [String] = []
-
     private var canSend: Bool {
-        switch selectedTab {
-        case .month: return !selectedMonths.isEmpty
-        case .week:  return weekStartIso != nil && weekEndIso != nil && weekStartIso! <= weekEndIso!
-        case .days:  return !selectedDatesIso.isEmpty
+        switch draft.selectedTab {
+        case .month: return !draft.selectedMonths.isEmpty
+        case .week:
+            guard let start = draft.weekStartIso, let end = draft.weekEndIso else { return false }
+            return start <= end
+        case .days:  return !draft.selectedDatesIso.isEmpty
         }
     }
 
@@ -37,16 +24,17 @@ struct CompactView: View {
 
             // Content
             Group {
-                switch selectedTab {
+                switch draft.selectedTab {
                 case .month:
-                    CompactMonthPicker(selectedMonths: $selectedMonths, isScrollable: isScrollable)
+                    CompactMonthPicker(selectedMonths: $draft.selectedMonths, isScrollable: isScrollable)
                 case .week:
-                    CompactWeekPicker(startIso: $weekStartIso, endIso: $weekEndIso, isScrollable: isScrollable)
+                    CompactWeekPicker(startIso: $draft.weekStartIso, endIso: $draft.weekEndIso, isScrollable: isScrollable)
                 case .days:
-                    CompactDaysPicker(selectedDatesIso: $selectedDatesIso)
+                    CompactDaysPicker(selectedDatesIso: $draft.selectedDatesIso)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipped()
             .padding(.horizontal, 14)
 
             // Send button
@@ -73,9 +61,9 @@ struct CompactView: View {
 
     @ViewBuilder
     private func tabButton(_ mode: ScheduleMode) -> some View {
-        let isActive = selectedTab == mode
+        let isActive = draft.selectedTab == mode
         Button {
-            selectedTab = mode
+            draft.selectedTab = mode
         } label: {
             VStack(spacing: 8) {
                 Text(mode.displayName)
@@ -122,13 +110,13 @@ struct CompactView: View {
         return Schedule(
             id: UUID(),
             creatorId: "",   // filled in by MessagesViewController using localParticipantIdentifier
-            mode: selectedTab,
+            mode: draft.selectedTab,
             title: nil,
-            months: selectedTab == .month ? selectedMonths : nil,
-            weekRange: selectedTab == .week
-                ? (weekStartIso.map { s in DateRange(startIso: s, endIso: weekEndIso ?? s) })
+            months: draft.selectedTab == .month ? draft.selectedMonths : nil,
+            weekRange: draft.selectedTab == .week
+                ? (draft.weekStartIso.map { s in DateRange(startIso: s, endIso: draft.weekEndIso ?? s) })
                 : nil,
-            specificDates: selectedTab == .days ? selectedDatesIso : nil,
+            specificDates: draft.selectedTab == .days ? draft.selectedDatesIso : nil,
             createdAt: now,
             updatedAt: now,
             isActive: true

@@ -4,7 +4,7 @@ struct CompactMonthPicker: View {
     @Binding var selectedMonths: [MonthYear]
     let isScrollable: Bool
 
-    private let months: [MonthYear] = buildUpcomingMonths(count: 16)
+    private let months: [MonthYear] = buildUpcomingMonths(count: 24)
     private var visibleMonths: [MonthYear] { isScrollable ? months : Array(months.prefix(6)) }
 
     private var selectedSet: Set<String> {

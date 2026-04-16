@@ -11,6 +11,7 @@ class MessagesViewController: MSMessagesAppViewController {
 
     /// The senderId for the local participant in this conversation.
     private var selfSenderId: String = ""
+    private let composerDraft = ComposerDraft()
 
     // MARK: - Hosted SwiftUI controller
 
@@ -97,6 +98,7 @@ class MessagesViewController: MSMessagesAppViewController {
             onSend: { [weak self] schedule in
                 self?.sendSchedule(schedule, conversation: conversation)
             },
+            draft: composerDraft,
             isScrollable: false
         )
         embed(SwiftUI: compactView)
@@ -160,6 +162,7 @@ class MessagesViewController: MSMessagesAppViewController {
             onSend: { [weak self] schedule in
                 self?.sendSchedule(schedule, conversation: conversation)
             },
+            draft: composerDraft,
             isScrollable: true
         )
         embed(SwiftUI: expandedView)
