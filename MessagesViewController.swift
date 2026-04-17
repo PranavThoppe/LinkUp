@@ -182,7 +182,7 @@ class MessagesViewController: MSMessagesAppViewController {
                 .font(.system(size: 14))
                 .foregroundColor(Theme.textSecondary)
                 .multilineTextAlignment(.center)
-                .padding(.horizontal, 24)
+                .padding(.horizontal, 21)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.background)
