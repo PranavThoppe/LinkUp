@@ -143,10 +143,7 @@ class MessagesViewController: MSMessagesAppViewController {
         message.url = url
         message.summaryText = summaryText(for: schedule)
 
-        let layout = MSMessageTemplateLayout()
-        layout.caption = "LinkUp"
-        layout.subcaption = schedule.mode.displayName + " schedule"
-        message.layout = layout
+        message.layout = TranscriptLayoutBuilder.makeLayout(for: payload)
 
         conversation.insert(message) { [weak self] error in
             if error == nil {
