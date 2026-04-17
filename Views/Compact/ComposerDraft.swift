@@ -3,6 +3,7 @@ import Foundation
 
 final class ComposerDraft: ObservableObject {
     @Published var selectedTab: ScheduleMode = .month
+    @Published var scheduleTitle: String = ""
     @Published var selectedMonths: [MonthYear]
     @Published var weekStartIso: String? = nil
     @Published var weekEndIso: String? = nil

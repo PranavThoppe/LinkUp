@@ -22,6 +22,13 @@ struct CompactView: View {
             // Tab bar
             tabBar
 
+            if isScrollable {
+                // Title input is shown only in expanded mode where keyboard space is available.
+                titleInput
+                    .padding(.horizontal, 14)
+                    .padding(.bottom, 8)
+            }
+
             // Content
             Group {
                 switch draft.selectedTab {
@@ -57,6 +64,25 @@ struct CompactView: View {
         .padding(.horizontal, 14)
         .padding(.top, 6)
         .padding(.bottom, 8)
+    }
+
+    private var titleInput: some View {
+            TextField(
+                "",
+                text: $draft.scheduleTitle,
+                prompt: Text("Title").foregroundColor(.white.opacity(0.7))
+            )            .textInputAutocapitalization(.sentences)
+            .autocorrectionDisabled(false)
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundColor(.white)
+            .padding(.horizontal, 12)
+            .frame(height: 40)
+            .background(Theme.cardBackground)
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(Theme.cardBorder, lineWidth: 1)
+            )
+            .cornerRadius(10)
     }
 
     @ViewBuilder
@@ -106,12 +132,13 @@ struct CompactView: View {
 
     private func buildSchedule() -> Schedule {
         let now = Date()
+        let trimmedTitle = draft.scheduleTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         // Derive creatorId: will be replaced with real senderId in MessagesViewController
         return Schedule(
             id: UUID(),
             creatorId: "",   // filled in by MessagesViewController using localParticipantIdentifier
             mode: draft.selectedTab,
-            title: nil,
+            title: trimmedTitle.isEmpty ? nil : trimmedTitle,
             months: draft.selectedTab == .month ? draft.selectedMonths : nil,
             weekRange: draft.selectedTab == .week
                 ? (draft.weekStartIso.map { s in DateRange(startIso: s, endIso: draft.weekEndIso ?? s) })
