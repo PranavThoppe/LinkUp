@@ -7,6 +7,8 @@ struct CompactView: View {
     /// True when picker content should allow full scrolling (expanded mode).
     let isScrollable: Bool
 
+    @FocusState private var isTitleFieldFocused: Bool
+
     private var canSend: Bool {
         switch draft.selectedTab {
         case .month: return !draft.selectedMonths.isEmpty
@@ -43,12 +45,14 @@ struct CompactView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .clipped()
             .padding(.horizontal, 14)
+            .simultaneousGesture(TapGesture().onEnded { isTitleFieldFocused = false })
 
             // Send button
             sendButton
                 .padding(.horizontal, 14)
                 .padding(.top, 10)
                 .padding(.bottom, 12)
+                .simultaneousGesture(TapGesture().onEnded { isTitleFieldFocused = false })
         }
         .background(Theme.background)
     }
@@ -64,25 +68,28 @@ struct CompactView: View {
         .padding(.horizontal, 14)
         .padding(.top, 6)
         .padding(.bottom, 8)
+        .simultaneousGesture(TapGesture().onEnded { isTitleFieldFocused = false })
     }
 
     private var titleInput: some View {
-            TextField(
-                "",
-                text: $draft.scheduleTitle,
-                prompt: Text("Title").foregroundColor(.white.opacity(0.7))
-            )            .textInputAutocapitalization(.sentences)
-            .autocorrectionDisabled(false)
-            .font(.system(size: 14, weight: .semibold))
-            .foregroundColor(.white)
-            .padding(.horizontal, 12)
-            .frame(height: 40)
-            .background(Theme.cardBackground)
-            .overlay(
-                RoundedRectangle(cornerRadius: 10)
-                    .stroke(Theme.cardBorder, lineWidth: 1)
-            )
-            .cornerRadius(10)
+        TextField(
+            "",
+            text: $draft.scheduleTitle,
+            prompt: Text("Title").foregroundColor(.white.opacity(0.7))
+        )
+        .focused($isTitleFieldFocused)
+        .textInputAutocapitalization(.sentences)
+        .autocorrectionDisabled(false)
+        .font(.system(size: 14, weight: .semibold))
+        .foregroundColor(.white)
+        .padding(.horizontal, 12)
+        .frame(height: 40)
+        .background(Theme.cardBackground)
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(Theme.cardBorder, lineWidth: 1)
+        )
+        .cornerRadius(10)
     }
 
     @ViewBuilder
