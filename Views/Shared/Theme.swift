@@ -13,6 +13,9 @@ enum Theme {
 
     // MARK: - Accent
     static let primaryBlue = Color(hex: "#0A84FF")
+    /// Bright outgoing-message blue for transcript CTAs: lighter on dark cards than `primaryBlue`,
+    /// still in the same family as the iOS / iMessage bubble tint.
+    static let messageBubbleBlue = Color(hex: "#5AACFF")
     static let voteGreenLow = Color(hex: "#2A2F2A")
     static let voteGreenHigh = Color(hex: "#34C759")
     static let statusOrange = Color(hex: "#FF9F0A")

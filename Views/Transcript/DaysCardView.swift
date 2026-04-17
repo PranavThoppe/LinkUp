@@ -2,20 +2,23 @@ import SwiftUI
 
 struct DaysCardView: View {
     let payload: MessagePayload
+    var selfSenderId: String? = nil
 
     private let slotLabels = ["Morn", "Aftn", "Eve", "Night"]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("LinkUp • Days")
-                .font(.system(size: 13, weight: .bold))
-                .foregroundColor(Theme.textPrimary)
-                .padding(.bottom, 8)
+            Text(scheduleTitle)
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.bottom, 10)
 
             if dayColumns.isEmpty {
                 Text("No days selected")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundColor(Theme.textSecondary)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity, alignment: .center)
             } else {
                 daysGrid
             }
@@ -23,53 +26,91 @@ struct DaysCardView: View {
             Rectangle()
                 .fill(Theme.cardBorder)
                 .frame(height: 0.5)
-                .padding(.top, 8)
+                .padding(.top, 10)
 
             footerView
-                .padding(.top, 8)
+                .padding(.top, 6)
         }
-        .padding(10)
+        .padding(.horizontal, 12)
+        .padding(.top, 8)
+        .padding(.bottom, 8)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Theme.cardBackground)
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.cardBorder, lineWidth: 1))
-        .cornerRadius(12)
+        .overlay(alignment: .bottom) {
+            if let selfId = selfSenderId {
+                VoteBanner(hasVoted: selfHasVoted(selfId: selfId))
+            }
+        }
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(Theme.cardBorder, lineWidth: 1))
+        .cornerRadius(16)
     }
 
     private var daysGrid: some View {
-        VStack(spacing: 4) {
-            HStack(spacing: 4) {
+        VStack(spacing: 5) {
+            HStack(spacing: 3) {
                 Text("")
-                    .frame(width: 34)
+                    .frame(width: 36)
                 ForEach(dayColumns, id: \.self) { iso in
                     Text(shortLabel(for: iso))
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundColor(Theme.textSecondary)
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
                         .frame(maxWidth: .infinity)
                 }
             }
+            .padding(.bottom, 2)
 
             ForEach(0..<slotLabels.count, id: \.self) { slot in
-                HStack(spacing: 4) {
+                HStack(spacing: 3) {
                     Text(slotLabels[slot])
-                        .font(.system(size: 8, weight: .bold))
-                        .foregroundColor(Theme.textSecondary)
-                        .frame(width: 34, alignment: .leading)
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundColor(.white)
+                        .frame(width: 36, alignment: .leading)
 
                     ForEach(dayColumns, id: \.self) { iso in
                         let key = slotKey(date: iso, slot: slot)
                         let colors = voterColorsBySlot[key] ?? []
                         let count = colors.count
-                        VStack(spacing: 1) {
-                            Color.clear.frame(height: 1)
+                        ZStack {
                             VoterDots(colors: colors, maxVisible: 2)
+                            if colors.isEmpty {
+                                slotPlaceholderDots
+                            }
                         }
                         .frame(maxWidth: .infinity)
-                        .frame(height: 18)
-                        .background(VoteHeatmap.color(for: count, maxCount: maxSlotVotes))
-                        .cornerRadius(4)
+                        .frame(height: 20)
+                        .background(slotCellBackground(voteCount: count))
+                        .cornerRadius(5)
                     }
                 }
             }
         }
+    }
+
+    /// Title from selected days: `Schedule • April` or `Schedule • April & May` across months.
+    private var scheduleTitle: String {
+        let parts = scheduleTitleMonthParts()
+        if parts.isEmpty { return "Schedule" }
+        return "Schedule • " + parts.joined(separator: " & ")
+    }
+
+    private func scheduleTitleMonthParts() -> [String] {
+        let currentYear = Calendar(identifier: .gregorian).component(.year, from: Date())
+        var seenKeys = Set<String>()
+        var parts: [String] = []
+        for iso in dayColumns {
+            guard let (year, month, _) = parseISODate(iso) else { continue }
+            let key = "\(year)-\(month)"
+            guard !seenKeys.contains(key) else { continue }
+            seenKeys.insert(key)
+            if year == currentYear {
+                parts.append(monthName(month))
+            } else {
+                parts.append("\(monthName(month)) \(String(year))")
+            }
+        }
+        return parts
     }
 
     private var dayColumns: [String] {
@@ -95,6 +136,25 @@ struct DaysCardView: View {
         "\(date)#\(slot)"
     }
 
+    private func slotCellBackground(voteCount: Int) -> Color {
+        if voteCount > 0 {
+            VoteHeatmap.color(for: voteCount, maxCount: maxSlotVotes)
+        } else {
+            Theme.cellDefault
+        }
+    }
+
+    private var slotPlaceholderDots: some View {
+        HStack(spacing: 3) {
+            Circle()
+                .fill(Color.white.opacity(0.25))
+                .frame(width: 5, height: 5)
+            Circle()
+                .fill(Color.white.opacity(0.25))
+                .frame(width: 5, height: 5)
+        }
+    }
+
     private func shortLabel(for iso: String) -> String {
         guard let (y, m, d) = parseISODate(iso) else { return iso }
         let comps = DateComponents(year: y, month: m + 1, day: d)
@@ -114,22 +174,26 @@ struct DaysCardView: View {
         return payload.participants.filter { votedIds.contains($0.id) }
     }
 
+    private func selfHasVoted(selfId: String) -> Bool {
+        payload.votes.contains { $0.senderId == selfId && (!($0.slots ?? []).isEmpty || !$0.dates.isEmpty) }
+    }
+
     private var footerView: some View {
         HStack(spacing: 0) {
             HStack(spacing: 4) {
                 ForEach(Array(votedParticipants.prefix(3).enumerated()), id: \.offset) { _, participant in
                     Circle()
                         .fill(Color(hex: participant.color))
-                        .frame(width: 16, height: 16)
+                        .frame(width: 20, height: 20)
                         .overlay(
                             Text(participant.initial)
-                                .font(.system(size: 8, weight: .bold))
+                                .font(.system(size: 9, weight: .bold))
                                 .foregroundColor(.white)
                         )
                 }
                 Text(verbatim: "\(votedParticipants.count) voted")
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundColor(Theme.textSecondary)
+                    .foregroundColor(.white)
                     .padding(.leading, 2)
             }
 
@@ -137,7 +201,7 @@ struct DaysCardView: View {
 
             Text("Tap to vote →")
                 .font(.system(size: 11, weight: .semibold))
-                .foregroundColor(Theme.primaryBlue)
+                .foregroundColor(Theme.messageBubbleBlue)
         }
     }
 }

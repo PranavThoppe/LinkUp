@@ -85,7 +85,10 @@ class MessagesViewController: MSMessagesAppViewController {
         case .expanded:
             presentExpandedView(conversation: conversation)
         case .transcript:
-            break   // Transcript is handled by MSMessageTemplateLayout; no SwiftUI needed here.
+            // MSMessageTemplateLayout is used; the bubble content is the rendered
+            // card image set at send time. The extension is never launched in
+            // .transcript style with template layouts.
+            break
         @unknown default:
             break
         }
@@ -189,11 +192,15 @@ class MessagesViewController: MSMessagesAppViewController {
     // MARK: - SwiftUI embedding helpers
 
     private func embed<Content: View>(SwiftUI content: Content) {
+        embedHosted(content: content, background: UIColor(Theme.background))
+    }
+
+    private func embedHosted<Content: View>(content: Content, background: UIColor) {
         removeHostedController()
         let host = UIHostingController(rootView: content)
         addChild(host)
         host.view.translatesAutoresizingMaskIntoConstraints = false
-        host.view.backgroundColor = UIColor(Theme.background)
+        host.view.backgroundColor = background
         view.addSubview(host.view)
         NSLayoutConstraint.activate([
             host.view.topAnchor.constraint(equalTo: view.topAnchor),

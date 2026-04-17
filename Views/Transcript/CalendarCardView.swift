@@ -2,6 +2,7 @@ import SwiftUI
 
 struct CalendarCardView: View {
     let payload: MessagePayload
+    var selfSenderId: String? = nil
 
     private let weekdayLabels = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"]
 
@@ -26,6 +27,11 @@ struct CalendarCardView: View {
         .padding(.bottom, 8)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Theme.cardBackground)
+        .overlay(alignment: .bottom) {
+            if let selfId = selfSenderId {
+                VoteBanner(hasVoted: selfHasVoted(selfId: selfId))
+            }
+        }
         .overlay(RoundedRectangle(cornerRadius: 16).stroke(Theme.cardBorder, lineWidth: 1))
         .cornerRadius(16)
     }
@@ -132,7 +138,7 @@ struct CalendarCardView: View {
 
             Text("Tap to vote →")
                 .font(.system(size: 11, weight: .semibold))
-                .foregroundColor(Theme.primaryBlue)
+                .foregroundColor(Theme.messageBubbleBlue)
         }
     }
 
@@ -168,5 +174,9 @@ struct CalendarCardView: View {
     private var votedParticipants: [Participant] {
         let votedIds = Set(payload.votes.filter { !$0.dates.isEmpty }.map { $0.senderId })
         return payload.participants.filter { votedIds.contains($0.id) }
+    }
+
+    private func selfHasVoted(selfId: String) -> Bool {
+        payload.votes.contains { $0.senderId == selfId && !$0.dates.isEmpty }
     }
 }

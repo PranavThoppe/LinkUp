@@ -1,0 +1,10 @@
+---
+description: Messages app extension; prefer Apple Messages/docs over generic iOS or cross-platform patterns.
+alwaysApply: true
+---
+
+# Messages app extension
+
+- **Scope:** This project is an **iOS Messages app extension**. Use **`Messages`**, **`MSMessagesAppViewController`**, and related types from Apple’s docs—not web or Android APIs.
+- **Source of truth:** Prefer [Messages](https://developer.apple.com/documentation/messages) and [MSMessagesAppViewController](https://developer.apple.com/documentation/messages/msmessagesappviewcontroller). For extension lifecycle, data sharing, and capabilities, use [App Extensions](https://developer.apple.com/app-extensions/) and the topics linked from those pages.
+- **When unsure:** Look up the official documentation for the type or scenario **before** guessing behavior (e.g. presentation styles, session updates, `MSMessage` payloads).
