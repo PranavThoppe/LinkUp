@@ -43,7 +43,7 @@ struct CompactDaysPicker: View {
                         .frame(height: 32)
                         .background(
                             selectedDatesIso.contains(pendingIso)
-                                ? Theme.cardBorder
+                                ? Theme.cellDefault
                                 : Theme.primaryBlue
                         )
                         .cornerRadius(16)
@@ -103,7 +103,7 @@ struct CompactDaysPicker: View {
                     .font(.system(size: 13, weight: .heavy))
                     .foregroundColor(.white)
                     .frame(width: 16, height: 16)
-                    .background(Theme.cardBorder)
+                    .background(Theme.cellDefault)
                     .clipShape(Circle())
             }
             .buttonStyle(.plain)
@@ -112,9 +112,6 @@ struct CompactDaysPicker: View {
         .padding(.trailing, 4)
         .frame(height: 28)
         .background(Theme.cardBackground)
-        .overlay(
-            Capsule().stroke(Theme.cardBorder, lineWidth: 1)
-        )
         .clipShape(Capsule())
     }
 

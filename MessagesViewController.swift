@@ -146,7 +146,7 @@ class MessagesViewController: MSMessagesAppViewController {
         message.url = url
         message.summaryText = summaryText(for: schedule)
 
-        message.layout = TranscriptLayoutBuilder.makeLayout(for: payload)
+        message.layout = TranscriptLayoutBuilder.makeLayout(for: payload, viewerParticipantId: selfSenderId)
 
         conversation.insert(message) { [weak self] error in
             if error == nil {

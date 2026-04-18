@@ -72,11 +72,7 @@ struct CompactMonthPicker: View {
             .frame(maxWidth: .infinity)
             .frame(height: 74)
             .background(isSelected ? Theme.voteGreenHigh : Theme.cardBackground)
-            .cornerRadius(12)
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(isSelected ? Theme.voteGreenHigh : Color(hex: "#3A3A3C"), lineWidth: 1)
-            )
+            .clipShape(RoundedRectangle(cornerRadius: 12))
         }
         .buttonStyle(.plain)
     }

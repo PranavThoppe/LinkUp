@@ -5,8 +5,10 @@ import UIKit
 enum TranscriptLayoutBuilder {
     // Card dimensions used for both the rendered image and (if live layout is
     // re-introduced later) for preferredContentSize.
-    static let monthCardSize = CGSize(width: 300, height: 390)
-    static let compactCardSize = CGSize(width: 300, height: 260)
+    static let monthCardSize = CGSize(width: 320, height: 410)
+    static let compactCardWidth: CGFloat = 300
+    /// Default height when the compact header fits one line; actual snapshot height uses `compactCardSize(for:)`.
+    static let compactCardDefaultHeight: CGFloat = 240
 
     /// Returns an `MSMessageTemplateLayout` whose image is a pixel-perfect
     /// snapshot of the card view for the given payload.
@@ -16,10 +18,12 @@ enum TranscriptLayoutBuilder {
     /// `willBecomeActive` once per visible live-layout bubble with no way to
     /// identify which message each invocation belongs to). A static template
     /// image is reliable and sufficient until a shared data store is added.
+    /// - Parameter viewerParticipantId: `MSConversation.localParticipantIdentifier` for vote-aware
+    ///   transcript art ("Tap to vote" vs "Tap to view"). When `nil`, the callout defaults to "Tap to vote".
     @MainActor
-    static func makeLayout(for payload: MessagePayload) -> MSMessageLayout {
+    static func makeLayout(for payload: MessagePayload, viewerParticipantId: String? = nil) -> MSMessageLayout {
         let layout = MSMessageTemplateLayout()
-        layout.image = renderCardImage(for: payload)
+        layout.image = renderCardImage(for: payload, viewerParticipantId: viewerParticipantId)
         return layout
     }
 
@@ -31,19 +35,21 @@ enum TranscriptLayoutBuilder {
     /// avoids the "Snapshotting a view not in a visible window" warning and the
     /// resulting black images.
     @MainActor
-    private static func renderCardImage(for payload: MessagePayload) -> UIImage? {
+    private static func renderCardImage(for payload: MessagePayload, viewerParticipantId: String?) -> UIImage? {
         switch payload.schedule.mode {
         case .month:
-            let view = CalendarCardView(payload: payload)
+            let view = CalendarCardView(payload: payload, selfSenderId: viewerParticipantId)
                 .frame(width: monthCardSize.width, height: monthCardSize.height)
             return render(view, scale: 2)
         case .week:
-            let view = WeekCardView(payload: payload)
-                .frame(width: compactCardSize.width, height: compactCardSize.height)
+            let size = Self.compactCardSize(for: payload)
+            let view = WeekCardView(payload: payload, selfSenderId: viewerParticipantId)
+                .frame(width: size.width, height: size.height)
             return render(view, scale: 2)
         case .days:
-            let view = DaysCardView(payload: payload)
-                .frame(width: compactCardSize.width, height: compactCardSize.height)
+            let size = Self.compactCardSize(for: payload)
+            let view = DaysCardView(payload: payload, selfSenderId: viewerParticipantId)
+                .frame(width: size.width, height: size.height)
             return render(view, scale: 2)
         }
     }
@@ -53,5 +59,14 @@ enum TranscriptLayoutBuilder {
         let renderer = ImageRenderer(content: view)
         renderer.scale = scale
         return renderer.uiImage
+    }
+
+    /// Week/days transcript snapshot size: width fixed, height grows when the header splits or wraps.
+    private static func compactCardSize(for payload: MessagePayload) -> CGSize {
+        let isos = payload.compactTranscriptDayColumnIsoStrings()
+        let parts = TranscriptCompactScheduleHeader.monthParts(from: isos)
+        let headline = TranscriptCompactScheduleHeader.headline(for: payload.schedule)
+        let metrics = TranscriptCompactHeaderMetrics(headline: headline, monthParts: parts)
+        return CGSize(width: compactCardWidth, height: metrics.compactCardHeight)
     }
 }

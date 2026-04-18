@@ -11,12 +11,15 @@ struct CalendarCardView: View {
             headerView
                 .padding(.bottom, 8)
 
-            if let month = displayMonth {
-                monthGrid(month)
+            ZStack {
+                if let month = displayMonth {
+                    monthGrid(month)
+                }
+                TranscriptTapCallout(hasVoted: tapCalloutHasVoted)
             }
 
             Rectangle()
-                .fill(Theme.cardBorder)
+                .fill(Theme.cardDivider)
                 .frame(height: 0.5)
                 .padding(.top, 8)
             footerView
@@ -27,13 +30,12 @@ struct CalendarCardView: View {
         .padding(.bottom, 8)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Theme.cardBackground)
-        .overlay(alignment: .bottom) {
-            if let selfId = selfSenderId {
-                VoteBanner(hasVoted: selfHasVoted(selfId: selfId))
-            }
-        }
-        .overlay(RoundedRectangle(cornerRadius: 16).stroke(Theme.cardBorder, lineWidth: 1))
-        .cornerRadius(16)
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+    }
+
+    private var tapCalloutHasVoted: Bool {
+        guard let id = selfSenderId else { return false }
+        return payload.hasVote(from: id)
     }
 
     // MARK: - Header
@@ -133,12 +135,6 @@ struct CalendarCardView: View {
                     .foregroundColor(Theme.textSecondary)
                     .padding(.leading, 2)
             }
-
-            Spacer()
-
-            Text("Tap to vote →")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundColor(Theme.messageBubbleBlue)
         }
     }
 
@@ -176,7 +172,4 @@ struct CalendarCardView: View {
         return payload.participants.filter { votedIds.contains($0.id) }
     }
 
-    private func selfHasVoted(selfId: String) -> Bool {
-        payload.votes.contains { $0.senderId == selfId && !$0.dates.isEmpty }
-    }
 }

@@ -3,9 +3,11 @@ import SwiftUI
 enum Theme {
     // MARK: - Backgrounds
     static let background = Color(hex: "#000000")
-    static let cardBackground = Color(hex: "#1C1C1E")
-    static let cardBorder = Color(hex: "#38383A")
-    static let composerBackground = Color(hex: "#1C1C1E")
+    /// Deeper than iOS secondary grouped background so white text and accents read stronger.
+    static let cardBackground = Color(hex: "#0E0E10")
+    static let composerBackground = Color(hex: "#0E0E10")
+    /// Hairlines between sections inside a card (footer rule, etc.).
+    static let cardDivider = Color(hex: "#323236")
 
     // MARK: - Text
     static let textPrimary = Color(hex: "#ECEDEE")
@@ -22,7 +24,8 @@ enum Theme {
     static let statusGreen = Color(hex: "#34C759")
 
     // MARK: - Cell states
-    static let cellDefault = Color(hex: "#3A3A3C")
+    /// Slot / neutral fills — stepped up from `cardBackground` so grid cells stay legible.
+    static let cellDefault = Color(hex: "#4A4A52")
 
     // MARK: - Participant palette (matches Participant.palette)
     static let participantColors: [Color] = [

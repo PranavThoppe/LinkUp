@@ -8,23 +8,23 @@ struct WeekCardView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(scheduleTitle)
-                .font(.system(size: 20, weight: .semibold))
-                .foregroundColor(.white)
-                .frame(maxWidth: .infinity, alignment: .center)
-                .padding(.bottom, 10)
+            TranscriptCompactScheduleHeaderView(metrics: compactHeaderMetrics)
+                .padding(.bottom, compactHeaderMetrics.hasVisibleHeaderContent ? 10 : 0)
 
-            if dayColumns.isEmpty {
-                Text("No week range selected")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity, alignment: .center)
-            } else {
-                weekGrid
+            ZStack {
+                if dayColumns.isEmpty {
+                    Text("No week range selected")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                } else {
+                    weekGrid
+                }
+                TranscriptTapCallout(hasVoted: tapCalloutHasVoted)
             }
 
             Rectangle()
-                .fill(Theme.cardBorder)
+                .fill(Theme.cardDivider)
                 .frame(height: 0.5)
                 .padding(.top, 10)
 
@@ -36,13 +36,12 @@ struct WeekCardView: View {
         .padding(.bottom, 8)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Theme.cardBackground)
-        .overlay(alignment: .bottom) {
-            if let selfId = selfSenderId {
-                VoteBanner(hasVoted: selfHasVoted(selfId: selfId))
-            }
-        }
-        .overlay(RoundedRectangle(cornerRadius: 16).stroke(Theme.cardBorder, lineWidth: 1))
-        .cornerRadius(16)
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+    }
+
+    private var tapCalloutHasVoted: Bool {
+        guard let id = selfSenderId else { return false }
+        return payload.hasVote(from: id)
     }
 
     private var weekGrid: some View {
@@ -51,12 +50,7 @@ struct WeekCardView: View {
                 Text("")
                     .frame(width: 36)
                 ForEach(dayColumns, id: \.self) { iso in
-                    Text(shortLabel(for: iso))
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundColor(.white)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.75)
-                        .frame(maxWidth: .infinity)
+                    dayColumnHeader(iso: iso)
                 }
             }
             .padding(.bottom, 2)
@@ -64,53 +58,29 @@ struct WeekCardView: View {
             ForEach(0..<slotLabels.count, id: \.self) { slot in
                 HStack(spacing: 3) {
                     Text(slotLabels[slot])
-                        .font(.system(size: 9, weight: .semibold))
+                        .font(.system(size: 11, weight: .semibold))
                         .foregroundColor(.white)
                         .frame(width: 36, alignment: .leading)
 
                     ForEach(dayColumns, id: \.self) { iso in
                         let key = slotKey(date: iso, slot: slot)
-                        let colors = voterColorsBySlot[key] ?? []
-                        let count = colors.count
-                        ZStack {
-                            VoterDots(colors: colors, maxVisible: 2)
-                            if colors.isEmpty {
-                                slotPlaceholderDots
-                            }
-                        }
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 20)
-                        .background(slotCellBackground(voteCount: count))
-                        .cornerRadius(5)
+                        let count = voterColorsBySlot[key]?.count ?? 0
+                        Color.clear
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 26)
+                            .background(slotCellBackground(voteCount: count))
+                            .cornerRadius(5)
                     }
                 }
             }
         }
     }
 
-    /// Title line: `Schedule • April` or `Schedule • April & May` when the range crosses months.
-    private var scheduleTitle: String {
-        let parts = scheduleTitleMonthParts()
-        if parts.isEmpty { return "Schedule" }
-        return "Schedule • " + parts.joined(separator: " & ")
-    }
-
-    private func scheduleTitleMonthParts() -> [String] {
-        let currentYear = Calendar(identifier: .gregorian).component(.year, from: Date())
-        var seenKeys = Set<String>()
-        var parts: [String] = []
-        for iso in dayColumns {
-            guard let (year, month, _) = parseISODate(iso) else { continue }
-            let key = "\(year)-\(month)"
-            guard !seenKeys.contains(key) else { continue }
-            seenKeys.insert(key)
-            if year == currentYear {
-                parts.append(monthName(month))
-            } else {
-                parts.append("\(monthName(month)) \(String(year))")
-            }
-        }
-        return parts
+    private var compactHeaderMetrics: TranscriptCompactHeaderMetrics {
+        TranscriptCompactHeaderMetrics(
+            headline: TranscriptCompactScheduleHeader.headline(for: payload.schedule),
+            monthParts: TranscriptCompactScheduleHeader.monthParts(from: dayColumns)
+        )
     }
 
     private var dayColumns: [String] {
@@ -146,26 +116,24 @@ struct WeekCardView: View {
         }
     }
 
-    /// Faint placeholder dots so empty transcript cells match the “votes show here” layout.
-    private var slotPlaceholderDots: some View {
-        HStack(spacing: 3) {
-            Circle()
-                .fill(Color.white.opacity(0.25))
-                .frame(width: 5, height: 5)
-            Circle()
-                .fill(Color.white.opacity(0.25))
-                .frame(width: 5, height: 5)
+    @ViewBuilder
+    private func dayColumnHeader(iso: String) -> some View {
+        if let parts = transcriptDayColumnParts(iso: iso) {
+            VStack(spacing: 2) {
+                Text(parts.weekday)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(Theme.textSecondary)
+                Text(verbatim: "\(parts.day)")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.white)
+            }
+            .frame(maxWidth: .infinity)
+        } else {
+            Text(iso)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
         }
-    }
-
-    private func shortLabel(for iso: String) -> String {
-        guard let (y, m, d) = parseISODate(iso) else { return iso }
-        let comps = DateComponents(year: y, month: m + 1, day: d)
-        let cal = Calendar(identifier: .gregorian)
-        guard let date = cal.date(from: comps) else { return iso }
-        let formatter = DateFormatter()
-        formatter.dateFormat = "E d"
-        return formatter.string(from: date)
     }
 
     private var votedParticipants: [Participant] {
@@ -175,10 +143,6 @@ struct WeekCardView: View {
                 .map { $0.senderId }
         )
         return payload.participants.filter { votedIds.contains($0.id) }
-    }
-
-    private func selfHasVoted(selfId: String) -> Bool {
-        payload.votes.contains { $0.senderId == selfId && (!($0.slots ?? []).isEmpty || !$0.dates.isEmpty) }
     }
 
     private var footerView: some View {
@@ -199,33 +163,6 @@ struct WeekCardView: View {
                     .foregroundColor(.white)
                     .padding(.leading, 2)
             }
-
-            Spacer()
-
-            Text("Tap to vote →")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundColor(Theme.messageBubbleBlue)
         }
     }
-}
-
-private func dateRangeInclusive(startIso: String, endIso: String) -> [String] {
-    guard let (sy, sm, sd) = parseISODate(startIso),
-          let (ey, em, ed) = parseISODate(endIso) else { return [] }
-    let calendar = Calendar(identifier: .gregorian)
-    guard let startDate = calendar.date(from: DateComponents(year: sy, month: sm + 1, day: sd)),
-          let endDate = calendar.date(from: DateComponents(year: ey, month: em + 1, day: ed)),
-          startDate <= endDate else { return [] }
-
-    var values: [String] = []
-    var cursor = startDate
-    while cursor <= endDate {
-        let y = calendar.component(.year, from: cursor)
-        let m = calendar.component(.month, from: cursor) - 1
-        let d = calendar.component(.day, from: cursor)
-        values.append(toISODate(year: y, month: m, day: d))
-        guard let next = calendar.date(byAdding: .day, value: 1, to: cursor) else { break }
-        cursor = next
-    }
-    return values
 }

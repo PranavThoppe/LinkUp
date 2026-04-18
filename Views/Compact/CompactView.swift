@@ -85,11 +85,7 @@ struct CompactView: View {
         .padding(.horizontal, 12)
         .frame(height: 40)
         .background(Theme.cardBackground)
-        .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .stroke(Theme.cardBorder, lineWidth: 1)
-        )
-        .cornerRadius(10)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 
     @ViewBuilder

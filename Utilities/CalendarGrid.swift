@@ -71,6 +71,27 @@ func parseISODate(_ iso: String) -> (year: Int, month: Int, day: Int)? {
     return (y, m - 1, d)
 }
 
+/// Weekday letter(s) and day-of-month for week/days transcript column headers. Thursday and Saturday use two letters (`Th`, `Sa`); other weekdays use one (`S` … `F`).
+func transcriptDayColumnParts(iso: String) -> (weekday: String, day: Int)? {
+    guard let (y, m, d) = parseISODate(iso) else { return nil }
+    let comps = DateComponents(year: y, month: m + 1, day: d)
+    let cal = Calendar(identifier: .gregorian)
+    guard let date = cal.date(from: comps) else { return nil }
+    let weekday = cal.component(.weekday, from: date)
+    let prefix: String
+    switch weekday {
+    case 1: prefix = "S"
+    case 2: prefix = "M"
+    case 3: prefix = "T"
+    case 4: prefix = "W"
+    case 5: prefix = "Th"
+    case 6: prefix = "F"
+    case 7: prefix = "Sa"
+    default: prefix = ""
+    }
+    return (prefix, d)
+}
+
 /// Full month name (e.g. "April") for a 0-indexed month.
 func monthName(_ month: Int, year: Int? = nil) -> String {
     var comps = DateComponents()
@@ -82,6 +103,28 @@ func monthName(_ month: Int, year: Int? = nil) -> String {
     let formatter = DateFormatter()
     formatter.dateFormat = "MMMM"
     return formatter.string(from: date)
+}
+
+/// Inclusive list of YYYY-MM-DD strings from `startIso` through `endIso` (gregorian).
+func dateRangeInclusive(startIso: String, endIso: String) -> [String] {
+    guard let (sy, sm, sd) = parseISODate(startIso),
+          let (ey, em, ed) = parseISODate(endIso) else { return [] }
+    let calendar = Calendar(identifier: .gregorian)
+    guard let startDate = calendar.date(from: DateComponents(year: sy, month: sm + 1, day: sd)),
+          let endDate = calendar.date(from: DateComponents(year: ey, month: em + 1, day: ed)),
+          startDate <= endDate else { return [] }
+
+    var values: [String] = []
+    var cursor = startDate
+    while cursor <= endDate {
+        let y = calendar.component(.year, from: cursor)
+        let m = calendar.component(.month, from: cursor) - 1
+        let d = calendar.component(.day, from: cursor)
+        values.append(toISODate(year: y, month: m, day: d))
+        guard let next = calendar.date(byAdding: .day, value: 1, to: cursor) else { break }
+        cursor = next
+    }
+    return values
 }
 
 /// Returns the ISO date string for today (YYYY-MM-DD) in the local calendar.
