@@ -69,7 +69,7 @@ struct ExpandedDaysView: View {
                     .foregroundColor(Theme.textSecondary)
             }
             Spacer()
-            Button("Done") {
+            Button("Save") {
                 onDone(buildUpdatedPayload())
             }
             .font(.system(size: 17, weight: .semibold))

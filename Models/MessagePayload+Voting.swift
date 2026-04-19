@@ -7,7 +7,7 @@ extension MessagePayload {
             guard vote.senderId == participantId else { return false }
             switch schedule.mode {
             case .month:
-                return !vote.dates.isEmpty
+                return !vote.dates.isEmpty || !(vote.slots ?? []).isEmpty
             case .week, .days:
                 return !(vote.slots ?? []).isEmpty || !vote.dates.isEmpty
             }

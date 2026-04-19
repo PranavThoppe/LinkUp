@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 enum Theme {
     // MARK: - Backgrounds
@@ -50,5 +51,43 @@ extension Color {
         let g = Double((rgb >> 8) & 0xFF) / 255
         let b = Double(rgb & 0xFF) / 255
         self.init(red: r, green: g, blue: b)
+    }
+
+    /// Linear interpolation from `self` to `other`, where `t` is clamped to [0, 1].
+    func lerp(to other: Color, by t: CGFloat) -> Color {
+        let t = min(max(t, 0), 1)
+        let from = UIColor(self).resolvedRGBA
+        let to   = UIColor(other).resolvedRGBA
+        return Color(
+            red:   from.r + (to.r - from.r) * t,
+            green: from.g + (to.g - from.g) * t,
+            blue:  from.b + (to.b - from.b) * t,
+            opacity: from.a + (to.a - from.a) * t
+        )
+    }
+}
+
+private extension UIColor {
+    /// RGB in a predictable space; `getRed` often fails for colors created from SwiftUI `Color`.
+    var resolvedRGBA: (r: Double, g: Double, b: Double, a: Double) {
+        let c = resolvedColor(with: .current)
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        if c.getRed(&r, green: &g, blue: &b, alpha: &a) {
+            return (Double(r), Double(g), Double(b), Double(a))
+        }
+        guard let comps = c.cgColor.components, !comps.isEmpty else {
+            return (0, 0, 0, 1)
+        }
+        switch comps.count {
+        case 2:
+            let w = Double(comps[0])
+            return (w, w, w, Double(comps[1]))
+        case 3:
+            return (Double(comps[0]), Double(comps[1]), Double(comps[2]), 1)
+        case 4:
+            return (Double(comps[0]), Double(comps[1]), Double(comps[2]), Double(comps[3]))
+        default:
+            return (0, 0, 0, 1)
+        }
     }
 }

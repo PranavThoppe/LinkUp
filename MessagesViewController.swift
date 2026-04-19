@@ -12,6 +12,8 @@ class MessagesViewController: MSMessagesAppViewController {
     /// The senderId for the local participant in this conversation.
     private var selfSenderId: String = ""
     private let composerDraft = ComposerDraft()
+    private var monthVoteDraft: MonthVoteDraft?
+    private var monthVoteDraftScheduleId: UUID?
 
     // MARK: - Hosted SwiftUI controller
 
@@ -34,15 +36,20 @@ class MessagesViewController: MSMessagesAppViewController {
             switch PayloadCoder.decode(url: url) {
             case .success(let payload):
                 activePayload = payload
+                resetMonthVoteDraftIfNeeded(for: payload)
             case .unsupportedVersion(let v):
                 showUnsupportedVersionUI(version: v)
                 return
             case .notLinkUp:
                 activePayload = nil
+                monthVoteDraft = nil
+                monthVoteDraftScheduleId = nil
             }
         } else if conversation.selectedMessage != nil {
             // A non-URL message is selected — not a LinkUp bubble.
             activePayload = nil
+            monthVoteDraft = nil
+            monthVoteDraftScheduleId = nil
         }
         // When selectedMessage is nil we preserve whatever activePayload was already set.
         // willBecomeActive fires a second time after requestPresentationStyle(.expanded)
@@ -50,7 +57,7 @@ class MessagesViewController: MSMessagesAppViewController {
         // before didTransition mounts the voting UI.
 
         // Auto-expand to the voting view when the user taps an existing schedule bubble.
-        if activePayload != nil && presentationStyle == .compact {
+        if activePayload != nil && presentationStyle == .compact && conversation.selectedMessage != nil {
             requestPresentationStyle(.expanded)
             return
         }
@@ -77,15 +84,22 @@ class MessagesViewController: MSMessagesAppViewController {
             switch PayloadCoder.decode(url: url) {
             case .success(let payload):
                 activePayload = payload
+                resetMonthVoteDraftIfNeeded(for: payload)
             case .unsupportedVersion(let v):
                 activePayload = nil
+                monthVoteDraft = nil
+                monthVoteDraftScheduleId = nil
                 showUnsupportedVersionUI(version: v)
                 return
             case .notLinkUp:
                 activePayload = nil
+                monthVoteDraft = nil
+                monthVoteDraftScheduleId = nil
             }
         } else {
             activePayload = nil
+            monthVoteDraft = nil
+            monthVoteDraftScheduleId = nil
         }
 
         switch presentationStyle {
@@ -144,6 +158,22 @@ class MessagesViewController: MSMessagesAppViewController {
     // MARK: - Compact (creation)
 
     private func presentCompactView(conversation: MSConversation) {
+        if let payload = activePayload, payload.schedule.mode == .month {
+            let compactSlotsView = MonthSlotsCompactView(
+                payload: payload,
+                selfSenderId: selfSenderId,
+                voteDraft: monthVoteDraft(for: payload),
+                onSave: { [weak self] updatedPayload in
+                    self?.submitVote(updatedPayload, conversation: conversation)
+                },
+                onExpand: { [weak self] in
+                    self?.requestPresentationStyle(.expanded)
+                }
+            )
+            embed(SwiftUI: compactSlotsView)
+            return
+        }
+
         let compactView = CompactView(
             onSend: { [weak self] schedule in
                 self?.sendSchedule(schedule, conversation: conversation)
@@ -212,8 +242,12 @@ class MessagesViewController: MSMessagesAppViewController {
             let expandedView = ExpandedView(
                 payload: payload,
                 selfSenderId: selfSenderId,
+                monthVoteDraft: payload.schedule.mode == .month ? monthVoteDraft(for: payload) : nil,
                 onDone: { [weak self] updatedPayload in
                     self?.submitVote(updatedPayload, conversation: conversation)
+                },
+                onCollapseToCompact: { [weak self] in
+                    self?.requestPresentationStyle(.compact)
                 }
             )
             embed(SwiftUI: expandedView)
@@ -326,6 +360,32 @@ class MessagesViewController: MSMessagesAppViewController {
         case .days:
             let count = schedule.specificDates?.count ?? 0
             return "LinkUp: \(count) day\(count == 1 ? "" : "s") – tap to vote"
+        }
+    }
+
+    private func monthVoteDraft(for payload: MessagePayload) -> MonthVoteDraft {
+        if payload.schedule.mode != .month {
+            let draft = MonthVoteDraft(payload: payload, selfSenderId: selfSenderId)
+            return draft
+        }
+        if let existing = monthVoteDraft, monthVoteDraftScheduleId == payload.schedule.id {
+            return existing
+        }
+        let draft = MonthVoteDraft(payload: payload, selfSenderId: selfSenderId)
+        monthVoteDraft = draft
+        monthVoteDraftScheduleId = payload.schedule.id
+        return draft
+    }
+
+    private func resetMonthVoteDraftIfNeeded(for payload: MessagePayload) {
+        guard payload.schedule.mode == .month else {
+            monthVoteDraft = nil
+            monthVoteDraftScheduleId = nil
+            return
+        }
+        if monthVoteDraftScheduleId != payload.schedule.id {
+            monthVoteDraft = MonthVoteDraft(payload: payload, selfSenderId: selfSenderId)
+            monthVoteDraftScheduleId = payload.schedule.id
         }
     }
 }

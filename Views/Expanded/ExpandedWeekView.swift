@@ -71,7 +71,7 @@ struct ExpandedWeekView: View {
                 }
             }
             Spacer()
-            Button("Done") {
+            Button("Save") {
                 onDone(buildUpdatedPayload())
             }
             .font(.system(size: 17, weight: .semibold))

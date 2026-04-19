@@ -3,18 +3,46 @@ import SwiftUI
 struct ExpandedCalendarView: View {
     let payload: MessagePayload
     let selfSenderId: String
+    @ObservedObject var voteDraft: MonthVoteDraft
     let onDone: (MessagePayload) -> Void
+    let onCollapseToCompact: (() -> Void)?
 
-    @State private var selectedDates: Set<String>
+    @State private var focusedMonthIndex: Int = 0
+    @State private var focusedLegendDate: String = ""
+    @State private var collapseHintOffset: CGFloat = 0
+    @State private var isCollapseAnimationRunning = false
+    /// Upward drag on toolbar (points); drives footer hint color before collapse completes.
+    @State private var collapseToolbarSwipeMagnitude: CGFloat = 0
+
+    private let collapseSwipeColorThreshold: CGFloat = 56
 
     private let weekdayLabels = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"]
 
-    init(payload: MessagePayload, selfSenderId: String, onDone: @escaping (MessagePayload) -> Void) {
+    private var scheduleMonths: [MonthYear] {
+        payload.schedule.months ?? []
+    }
+
+    /// Stable key so month list changes clamp the focused index reliably.
+    private var scheduleMonthsSignature: String {
+        scheduleMonths.map { "\($0.year)-\($0.month)" }.joined(separator: "|")
+    }
+
+    private var collapseFooterHintBlueProgress: CGFloat {
+        min(max(collapseToolbarSwipeMagnitude / collapseSwipeColorThreshold, 0), 1)
+    }
+
+    init(
+        payload: MessagePayload,
+        selfSenderId: String,
+        voteDraft: MonthVoteDraft,
+        onDone: @escaping (MessagePayload) -> Void,
+        onCollapseToCompact: (() -> Void)? = nil
+    ) {
         self.payload = payload
         self.selfSenderId = selfSenderId
+        self.voteDraft = voteDraft
         self.onDone = onDone
-        let existing = payload.votes.first { $0.senderId == selfSenderId }
-        _selectedDates = State(initialValue: Set(existing?.dates ?? []))
+        self.onCollapseToCompact = onCollapseToCompact
     }
 
     var body: some View {
@@ -25,38 +53,67 @@ struct ExpandedCalendarView: View {
                 .frame(height: 0.5)
             ScrollView {
                 VStack(spacing: 20) {
-                    ForEach(payload.schedule.months ?? [], id: \.self) { month in
-                        monthCard(month)
+                    if !scheduleMonths.isEmpty {
+                        monthCard(scheduleMonths[focusedMonthIndex])
                     }
-                    voterLegend
+                    slotsInsightCard
                 }
                 .padding(16)
             }
+            if !voteDraft.sortedDates.isEmpty {
+                Rectangle()
+                    .fill(Theme.cardDivider)
+                    .frame(height: 0.5)
+                ZStack {
+                    Text("Swipe down to edit times")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundColor(Theme.textSecondary)
+                        .opacity(1 - collapseFooterHintBlueProgress)
+                    Text("Swipe down to edit times")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundColor(Theme.primaryBlue)
+                        .opacity(collapseFooterHintBlueProgress)
+                }
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .offset(y: collapseHintOffset)
+                .background(Theme.background)
+            }
         }
         .background(Theme.background)
+        .onAppear {
+            clampFocusedMonthIndex()
+            syncFocusedLegendDate()
+            collapseHintOffset = 0
+            isCollapseAnimationRunning = false
+            collapseToolbarSwipeMagnitude = 0
+        }
+        .onChange(of: scheduleMonthsSignature) { _, _ in
+            clampFocusedMonthIndex()
+        }
+        .onChange(of: voteDraft.sortedDates) { _, _ in
+            syncFocusedLegendDate()
+        }
     }
 
     // MARK: - Toolbar
 
     private var toolbar: some View {
-        HStack(alignment: .center) {
-            VStack(alignment: .leading, spacing: 2) {
+        let stack = HStack(alignment: .center) {
+            VStack(alignment: .leading, spacing: 6) {
                 if let title = payload.schedule.title, !title.trimmingCharacters(in: .whitespaces).isEmpty {
                     Text(title)
                         .font(.system(size: 17, weight: .semibold))
                         .foregroundColor(Theme.textPrimary)
                 }
-                let monthsText = payload.schedule.months?
-                    .map { monthName($0.month) }
-                    .joined(separator: ", ") ?? ""
-                if !monthsText.isEmpty {
-                    Text(monthsText)
-                        .font(.system(size: 13))
-                        .foregroundColor(Theme.textSecondary)
+                if !scheduleMonths.isEmpty {
+                    monthChipStrip
                 }
             }
             Spacer()
-            Button("Done") {
+            Button("Save") {
                 onDone(buildUpdatedPayload())
             }
             .font(.system(size: 17, weight: .semibold))
@@ -65,6 +122,75 @@ struct ExpandedCalendarView: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
         .background(Theme.background)
+
+        return Group {
+            if onCollapseToCompact != nil {
+                stack.highPriorityGesture(toolbarSwipeUpToCompactGesture)
+            } else {
+                stack
+            }
+        }
+    }
+
+    private func performCollapseToCompact() {
+        guard let onCollapseToCompact, !isCollapseAnimationRunning else { return }
+        isCollapseAnimationRunning = true
+        let duration = 0.28
+        withAnimation(.easeInOut(duration: duration)) {
+            collapseHintOffset = -48
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration) {
+            onCollapseToCompact()
+        }
+    }
+
+    /// Swipe up on the toolbar (outside the calendar `ScrollView`) avoids fighting vertical scroll.
+    private var toolbarSwipeUpToCompactGesture: some Gesture {
+        DragGesture(minimumDistance: 10)
+            .onChanged { value in
+                let dy = value.translation.height
+                let verticalDominant = abs(dy) > abs(value.translation.width) * 1.2
+                if dy < 0 && verticalDominant {
+                    collapseToolbarSwipeMagnitude = -dy
+                } else if dy >= 0 {
+                    collapseToolbarSwipeMagnitude = 0
+                }
+            }
+            .onEnded { value in
+                let dy = value.translation.height
+                let verticalDominant = abs(dy) > abs(value.translation.width) * 1.25
+                if dy < -collapseSwipeColorThreshold && verticalDominant {
+                    performCollapseToCompact()
+                }
+                withAnimation(.easeOut(duration: 0.2)) {
+                    collapseToolbarSwipeMagnitude = 0
+                }
+            }
+    }
+
+    private var monthChipStrip: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(Array(scheduleMonths.enumerated()), id: \.offset) { index, month in
+                    let isSelected = index == focusedMonthIndex
+                    Button {
+                        focusedMonthIndex = index
+                    } label: {
+                        Text(chipTitle(for: month))
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(isSelected ? .white : Theme.textPrimary)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .fill(isSelected ? Theme.primaryBlue : Theme.cardBackground)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(chipAccessibilityLabel(month: month, isSelected: isSelected))
+                }
+            }
+        }
     }
 
     // MARK: - Month card
@@ -75,11 +201,6 @@ struct ExpandedCalendarView: View {
             .map { Array(grid[$0..<min($0 + 7, grid.count)]) }
 
         return VStack(spacing: 12) {
-            Text(monthHeaderTitle(for: month))
-                .font(.system(size: 18, weight: .semibold))
-                .foregroundColor(Theme.textPrimary)
-                .frame(maxWidth: .infinity, alignment: .center)
-
             HStack(spacing: 0) {
                 ForEach(weekdayLabels, id: \.self) { label in
                     Text(label)
@@ -106,7 +227,7 @@ struct ExpandedCalendarView: View {
     private func dayCell(cell: CalendarCell, month: MonthYear) -> some View {
         if cell.inMonth {
             let iso = toISODate(year: month.year, month: month.month, day: cell.day)
-            let isSelf = selectedDates.contains(iso)
+            let isSelf = voteDraft.selectedDates.contains(iso)
             let otherColors = otherVoterColorsByDate[iso] ?? []
             let bgColor: Color = isSelf
                 ? Theme.primaryBlue
@@ -115,13 +236,7 @@ struct ExpandedCalendarView: View {
                     : VoteHeatmap.color(for: otherColors.count, maxCount: maxOtherVotes))
 
             Button {
-                var next = selectedDates
-                if next.contains(iso) {
-                    next.remove(iso)
-                } else {
-                    next.insert(iso)
-                }
-                selectedDates = next
+                voteDraft.toggleDate(iso)
             } label: {
                 VStack(spacing: 2) {
                     ZStack {
@@ -146,34 +261,30 @@ struct ExpandedCalendarView: View {
         }
     }
 
-    // MARK: - Voter legend
-
-    private var voterLegend: some View {
+    private var slotsInsightCard: some View {
         Group {
-            if !allVoters.isEmpty {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("\(allVoters.count) response\(allVoters.count == 1 ? "" : "s")")
+            if !voteDraft.sortedDates.isEmpty {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Time slots (all votes)")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundColor(Theme.textSecondary)
 
-                    ForEach(allVoters, id: \.id) { participant in
-                        let count = dateVoteCount(for: participant.id)
-                        HStack(spacing: 10) {
-                            Circle()
-                                .fill(Color(hex: participant.color))
-                                .frame(width: 28, height: 28)
-                                .overlay(
-                                    Text(participant.initial)
-                                        .font(.system(size: 12, weight: .bold))
-                                        .foregroundColor(.white)
-                                )
-                            Text(participant.id == selfSenderId
-                                 ? "You · \(count) day\(count == 1 ? "" : "s")"
-                                 : "\(participant.initial) · \(count) day\(count == 1 ? "" : "s")")
-                                .font(.system(size: 14))
-                                .foregroundColor(Theme.textPrimary)
+                    Picker("Day", selection: $focusedLegendDate) {
+                        ForEach(voteDraft.sortedDates, id: \.self) { iso in
+                            Text(slotPickerTitle(iso)).tag(iso)
                         }
                     }
+                    .pickerStyle(.menu)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    VoteToggleGrid(
+                        dayColumns: focusedLegendDayColumns,
+                        slotLabels: slotLabels,
+                        selectedSlots: .constant(Set<String>()),
+                        otherVoterSlots: totalVoterSlotsByKey,
+                        isInteractive: false,
+                        orientation: .slotsOnXAxis
+                    )
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(16)
@@ -184,6 +295,7 @@ struct ExpandedCalendarView: View {
     }
 
     // MARK: - Computed
+    private let slotLabels = ["Morn", "Aftn", "Eve", "Night"]
 
     private var otherVoterColorsByDate: [String: [String]] {
         var map: [String: [String]] = [:]
@@ -199,60 +311,88 @@ struct ExpandedCalendarView: View {
         max(otherVoterColorsByDate.values.map(\.count).max() ?? 0, 1)
     }
 
-    private var allVoters: [Participant] {
-        let voterIds = Set(payload.votes.map { $0.senderId })
-        return payload.participants.filter { voterIds.contains($0.id) }
+    private var totalVoterSlotsByKey: [String: [String]] {
+        guard !focusedLegendDate.isEmpty else { return [:] }
+        var map: [String: [String]] = [:]
+        for vote in payload.votes {
+            for slot in vote.slots ?? [] where slot.date == focusedLegendDate {
+                let key = makeSlotKey(date: slot.date, slotIndex: slot.slotIndex)
+                map[key, default: []].append(vote.senderColor)
+            }
+        }
+        return map
     }
 
-    private func dateVoteCount(for participantId: String) -> Int {
-        if participantId == selfSenderId { return selectedDates.count }
-        return payload.votes.first { $0.senderId == participantId }?.dates.count ?? 0
+    private func clampFocusedMonthIndex() {
+        let count = scheduleMonths.count
+        guard count > 0 else {
+            focusedMonthIndex = 0
+            return
+        }
+        focusedMonthIndex = min(max(0, focusedMonthIndex), count - 1)
     }
 
-    private func monthHeaderTitle(for month: MonthYear) -> String {
+    private var focusedLegendDayColumns: [String] {
+        focusedLegendDate.isEmpty ? [] : [focusedLegendDate]
+    }
+
+    private func syncFocusedLegendDate() {
+        let sortedDates = voteDraft.sortedDates
+        guard !sortedDates.isEmpty else {
+            focusedLegendDate = ""
+            return
+        }
+        if !sortedDates.contains(focusedLegendDate) {
+            focusedLegendDate = sortedDates[0]
+        }
+    }
+
+    private func chipTitle(for month: MonthYear) -> String {
+        let short = shortMonthName(month.month)
         let currentYear = Calendar(identifier: .gregorian).component(.year, from: Date())
-        return month.year == currentYear
+        if month.year == currentYear {
+            return short
+        }
+        return "\(short) \(month.year)"
+    }
+
+    private func chipAccessibilityLabel(month: MonthYear, isSelected: Bool) -> String {
+        let currentYear = Calendar(identifier: .gregorian).component(.year, from: Date())
+        let base = month.year == currentYear
             ? monthName(month.month)
             : "\(monthName(month.month)) \(month.year)"
+        return isSelected ? "\(base), selected" : base
+    }
+
+    private func slotPickerTitle(_ iso: String) -> String {
+        guard let parts = transcriptDayColumnParts(iso: iso) else { return iso }
+        return "\(parts.weekday) \(parts.day) · \(monthNameFromIso(iso))"
+    }
+
+    private func monthNameFromIso(_ iso: String) -> String {
+        guard let (_, m, _) = parseISODate(iso) else { return "" }
+        return monthName(m)
+    }
+
+    private func shortMonthName(_ month: Int) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM"
+        var comps = DateComponents()
+        comps.month = month + 1
+        comps.year = 2000
+        comps.day = 1
+        let date = Calendar(identifier: .gregorian).date(from: comps) ?? Date()
+        return formatter.string(from: date)
     }
 
     // MARK: - Build updated payload
 
     private func buildUpdatedPayload() -> MessagePayload {
-        let (selfColor, selfInitial, updatedParticipants) = resolvedSelfIdentity()
-        let existingId = payload.votes.first { $0.senderId == selfSenderId }?.id ?? UUID()
-
-        var updatedVotes = payload.votes.filter { $0.senderId != selfSenderId }
-        if !selectedDates.isEmpty {
-            let newVote = Vote(
-                id: existingId,
-                senderId: selfSenderId,
-                senderInitial: selfInitial,
-                senderColor: selfColor,
-                dates: Array(selectedDates).sorted(),
-                slots: nil,
-                updatedAt: Date()
-            )
-            updatedVotes.append(newVote)
-        }
-
-        return MessagePayload(
-            version: payload.version,
-            schedule: payload.schedule.stampedNow(),
-            votes: updatedVotes,
-            participants: updatedParticipants,
-            revision: payload.revision + 1,
-            lastWriterId: selfSenderId
+        buildUpdatedMonthPayload(
+            payload: payload,
+            selfSenderId: selfSenderId,
+            selectedDates: voteDraft.selectedDates,
+            selectedSlotKeys: voteDraft.selectedSlotKeys
         )
-    }
-
-    private func resolvedSelfIdentity() -> (color: String, initial: String, participants: [Participant]) {
-        if let existing = payload.participants.first(where: { $0.id == selfSenderId }) {
-            return (existing.color, existing.initial, payload.participants)
-        }
-        let color = Participant.color(for: payload.participants.count)
-        let initial = String(selfSenderId.prefix(1)).uppercased()
-        let newParticipant = Participant(id: selfSenderId, initial: initial, color: color)
-        return (color, initial, payload.participants + [newParticipant])
     }
 }
