@@ -10,6 +10,12 @@ enum TranscriptLayoutBuilder {
     /// Default height when the compact header fits one line; actual snapshot height uses `compactCardSize(for:)`.
     static let compactCardDefaultHeight: CGFloat = 240
 
+    /// Raster scale for transcript snapshots — match the device so 3× phones get 3× pixels (sharper than a fixed 2× bitmap).
+    private static var transcriptSnapshotScale: CGFloat {
+        let s = UITraitCollection.current.displayScale
+        return s > 0 ? s : 2
+    }
+
     /// Returns an `MSMessageTemplateLayout` whose image is a pixel-perfect
     /// snapshot of the card view for the given payload.
     ///
@@ -40,17 +46,17 @@ enum TranscriptLayoutBuilder {
         case .month:
             let view = CalendarCardView(payload: payload, selfSenderId: viewerParticipantId)
                 .frame(width: monthCardSize.width, height: monthCardSize.height)
-            return render(view, scale: 2)
+            return render(view, scale: transcriptSnapshotScale)
         case .week:
             let size = Self.compactCardSize(for: payload)
             let view = WeekCardView(payload: payload, selfSenderId: viewerParticipantId)
                 .frame(width: size.width, height: size.height)
-            return render(view, scale: 2)
+            return render(view, scale: transcriptSnapshotScale)
         case .days:
             let size = Self.compactCardSize(for: payload)
             let view = DaysCardView(payload: payload, selfSenderId: viewerParticipantId)
                 .frame(width: size.width, height: size.height)
-            return render(view, scale: 2)
+            return render(view, scale: transcriptSnapshotScale)
         }
     }
 
