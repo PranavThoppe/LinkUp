@@ -27,14 +27,10 @@ class MessagesViewController: MSMessagesAppViewController {
     override func willBecomeActive(with conversation: MSConversation) {
         super.willBecomeActive(with: conversation)
 
-        print("[LinkUp] willBecomeActive — style=\(presentationStyle.rawValue), selectedMessage=\(conversation.selectedMessage != nil ? "SET" : "NIL"), url=\(conversation.selectedMessage?.url?.absoluteString ?? "NIL")")
-
-
         selfSenderId = conversation.localParticipantIdentifier.uuidString
 
         if let selectedMessage = conversation.selectedMessage,
            let url = selectedMessage.url {
-            print("[LinkUp] message URL: \(url.absoluteString)")  
             switch PayloadCoder.decode(url: url) {
             case .success(let payload):
                 activePayload = payload
@@ -75,26 +71,20 @@ class MessagesViewController: MSMessagesAppViewController {
     override func didSelect(_ message: MSMessage, conversation: MSConversation) {
         super.didSelect(message, conversation: conversation)
 
-        print("[LinkUp] didSelect — url: \(message.url?.absoluteString ?? "NIL")")
-
         selfSenderId = conversation.localParticipantIdentifier.uuidString
 
         if let url = message.url {
             switch PayloadCoder.decode(url: url) {
             case .success(let payload):
-                print("[LinkUp] decode: SUCCESS, mode=\(payload.schedule.mode)")
                 activePayload = payload
             case .unsupportedVersion(let v):
-                print("[LinkUp] decode: unsupportedVersion \(v)")
                 activePayload = nil
                 showUnsupportedVersionUI(version: v)
                 return
             case .notLinkUp:
-                print("[LinkUp] decode: notLinkUp")
                 activePayload = nil
             }
         } else {
-            print("[LinkUp] didSelect — url is NIL")
             activePayload = nil
         }
 
@@ -218,7 +208,6 @@ class MessagesViewController: MSMessagesAppViewController {
     // MARK: - Expanded (voting or creation)
 
     private func presentExpandedView(conversation: MSConversation) {
-        print("[LinkUp] presentExpandedView — activePayload: \(activePayload != nil ? "SET" : "NULL")") 
         if let payload = activePayload {
             let expandedView = ExpandedView(
                 payload: payload,
