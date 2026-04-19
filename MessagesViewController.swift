@@ -27,10 +27,14 @@ class MessagesViewController: MSMessagesAppViewController {
     override func willBecomeActive(with conversation: MSConversation) {
         super.willBecomeActive(with: conversation)
 
+        print("[LinkUp] willBecomeActive — style=\(presentationStyle.rawValue), selectedMessage=\(conversation.selectedMessage != nil ? "SET" : "NIL"), url=\(conversation.selectedMessage?.url?.absoluteString ?? "NIL")")
+
+
         selfSenderId = conversation.localParticipantIdentifier.uuidString
 
         if let selectedMessage = conversation.selectedMessage,
            let url = selectedMessage.url {
+            print("[LinkUp] message URL: \(url.absoluteString)")  
             switch PayloadCoder.decode(url: url) {
             case .success(let payload):
                 activePayload = payload
@@ -40,8 +44,19 @@ class MessagesViewController: MSMessagesAppViewController {
             case .notLinkUp:
                 activePayload = nil
             }
-        } else {
+        } else if conversation.selectedMessage != nil {
+            // A non-URL message is selected — not a LinkUp bubble.
             activePayload = nil
+        }
+        // When selectedMessage is nil we preserve whatever activePayload was already set.
+        // willBecomeActive fires a second time after requestPresentationStyle(.expanded)
+        // completes with selectedMessage == nil; clearing here would wipe the payload
+        // before didTransition mounts the voting UI.
+
+        // Auto-expand to the voting view when the user taps an existing schedule bubble.
+        if activePayload != nil && presentationStyle == .compact {
+            requestPresentationStyle(.expanded)
+            return
         }
 
         presentUI(for: presentationStyle, conversation: conversation)
@@ -53,6 +68,48 @@ class MessagesViewController: MSMessagesAppViewController {
 
     override func didReceive(_ message: MSMessage, conversation: MSConversation) {
         super.didReceive(message, conversation: conversation)
+    }
+
+    /// When the user selects a different message in the thread while the extension is open,
+    /// refresh decoded state and re-present expanded/compact UI as appropriate.
+    override func didSelect(_ message: MSMessage, conversation: MSConversation) {
+        super.didSelect(message, conversation: conversation)
+
+        print("[LinkUp] didSelect — url: \(message.url?.absoluteString ?? "NIL")")
+
+        selfSenderId = conversation.localParticipantIdentifier.uuidString
+
+        if let url = message.url {
+            switch PayloadCoder.decode(url: url) {
+            case .success(let payload):
+                print("[LinkUp] decode: SUCCESS, mode=\(payload.schedule.mode)")
+                activePayload = payload
+            case .unsupportedVersion(let v):
+                print("[LinkUp] decode: unsupportedVersion \(v)")
+                activePayload = nil
+                showUnsupportedVersionUI(version: v)
+                return
+            case .notLinkUp:
+                print("[LinkUp] decode: notLinkUp")
+                activePayload = nil
+            }
+        } else {
+            print("[LinkUp] didSelect — url is NIL")
+            activePayload = nil
+        }
+
+        switch presentationStyle {
+        case .compact:
+            if activePayload != nil {
+                requestPresentationStyle(.expanded)
+            } else {
+                presentCompactView(conversation: conversation)
+            }
+        case .expanded:
+            presentExpandedView(conversation: conversation)
+        default:
+            break
+        }
     }
 
     override func didStartSending(_ message: MSMessage, conversation: MSConversation) {
@@ -142,7 +199,10 @@ class MessagesViewController: MSMessagesAppViewController {
 
         guard let url = try? PayloadCoder.encode(payload) else { return }
 
-        let message = MSMessage(session: MSSession())
+        // Reuse the selected bubble's session only when updating the same schedule
+        // (e.g. new votes). A new schedule from the composer has a fresh UUID, so
+        // this resolves to a new MSSession and posts a new bubble.
+        let message = MSMessage(session: transcriptSession(for: conversation, scheduleId: schedule.id))
         message.url = url
         message.summaryText = summaryText(for: schedule)
 
@@ -155,17 +215,48 @@ class MessagesViewController: MSMessagesAppViewController {
         }
     }
 
-    // MARK: - Expanded (creation)
+    // MARK: - Expanded (voting or creation)
 
     private func presentExpandedView(conversation: MSConversation) {
-        let expandedView = CompactView(
-            onSend: { [weak self] schedule in
-                self?.sendSchedule(schedule, conversation: conversation)
-            },
-            draft: composerDraft,
-            isScrollable: true
-        )
-        embed(SwiftUI: expandedView)
+        print("[LinkUp] presentExpandedView — activePayload: \(activePayload != nil ? "SET" : "NULL")") 
+        if let payload = activePayload {
+            let expandedView = ExpandedView(
+                payload: payload,
+                selfSenderId: selfSenderId,
+                onDone: { [weak self] updatedPayload in
+                    self?.submitVote(updatedPayload, conversation: conversation)
+                }
+            )
+            embed(SwiftUI: expandedView)
+        } else {
+            let composerView = CompactView(
+                onSend: { [weak self] schedule in
+                    self?.sendSchedule(schedule, conversation: conversation)
+                },
+                draft: composerDraft,
+                isScrollable: true
+            )
+            embed(SwiftUI: composerView)
+        }
+    }
+
+    // MARK: - Vote submission
+
+    /// Encodes the updated payload (with new vote merged in) into an MSMessage that
+    /// replaces the existing bubble in-place via session reuse.
+    private func submitVote(_ updatedPayload: MessagePayload, conversation: MSConversation) {
+        guard let url = try? PayloadCoder.encode(updatedPayload) else { return }
+
+        let message = MSMessage(session: transcriptSession(for: conversation, scheduleId: updatedPayload.schedule.id))
+        message.url = url
+        message.summaryText = summaryText(for: updatedPayload.schedule)
+        message.layout = TranscriptLayoutBuilder.makeLayout(for: updatedPayload, viewerParticipantId: selfSenderId)
+
+        conversation.insert(message) { [weak self] error in
+            if error == nil {
+                self?.dismiss()
+            }
+        }
     }
 
     // MARK: - Unsupported version fallback
@@ -220,6 +311,16 @@ class MessagesViewController: MSMessagesAppViewController {
     }
 
     // MARK: - Helpers
+
+    /// Session for `MSMessage`: same session updates the transcript bubble in place; a new session adds a new bubble.
+    private func transcriptSession(for conversation: MSConversation, scheduleId: UUID) -> MSSession {
+        guard let selected = conversation.selectedMessage,
+              let url = selected.url,
+              case .success(let existing) = PayloadCoder.decode(url: url),
+              existing.schedule.id == scheduleId
+        else { return MSSession() }
+        return selected.session ?? MSSession()
+    }
 
     private func deriveInitial(from senderId: String) -> String {
         guard let first = senderId.first else { return "?" }

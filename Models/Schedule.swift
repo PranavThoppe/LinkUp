@@ -23,4 +23,13 @@ struct Schedule: Codable {
     let createdAt: Date
     var updatedAt: Date
     var isActive: Bool
+
+    /// Returns a copy with `updatedAt` set to now — used when writing a new vote message.
+    func stampedNow() -> Schedule {
+        Schedule(
+            id: id, creatorId: creatorId, mode: mode, title: title,
+            months: months, weekRange: weekRange, specificDates: specificDates,
+            createdAt: createdAt, updatedAt: Date(), isActive: isActive
+        )
+    }
 }

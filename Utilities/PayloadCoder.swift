@@ -5,6 +5,9 @@ import Foundation
 /// Encoding: MessagePayload → JSON → base64url → URLComponents → URL
 /// Decoding: URL → URLComponents → base64url → JSON → MessagePayload
 ///
+/// URLs use the `https://linkup.app` scheme+host so the Messages framework
+/// preserves the URL when storing and transmitting bubbles (custom schemes
+/// like `linkup://` are silently stripped by the system).
 /// The `data` query parameter carries the base64url-encoded JSON blob.
 /// All other query items are reserved for future use (e.g. a `sid` shortcut for scheduleId).
 enum PayloadCoder {
@@ -34,8 +37,8 @@ enum PayloadCoder {
             .replacingOccurrences(of: "=", with: "")
 
         var components = URLComponents()
-        components.scheme = "linkup"
-        components.host = "schedule"
+        components.scheme = "https"
+        components.host = "linkup.app"
         components.queryItems = [URLQueryItem(name: queryKey, value: base64)]
 
         guard let url = components.url else {
@@ -56,7 +59,7 @@ enum PayloadCoder {
 
     static func decode(url: URL) -> DecodeResult {
         guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
-              components.scheme == "linkup" else {
+              components.host == "linkup.app" else {
             return .notLinkUp
         }
 
