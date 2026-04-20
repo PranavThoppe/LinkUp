@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct ExpandedCalendarView: View {
     let payload: MessagePayload
@@ -12,6 +13,10 @@ struct ExpandedCalendarView: View {
     @State private var isCollapseAnimationRunning = false
     /// Upward drag on toolbar (points); drives footer hint color before collapse completes.
     @State private var collapseToolbarSwipeMagnitude: CGFloat = 0
+    /// Footer “swipe down” hint: pulses when user taps the read-only vote grid.
+    @State private var swipeHintScale: CGFloat = 1
+    @State private var swipeHintBright = false
+    @State private var swipeHintAttentionGeneration: UInt = 0
 
     private let collapseSwipeColorThreshold: CGFloat = 56
 
@@ -66,7 +71,8 @@ struct ExpandedCalendarView: View {
                 ZStack {
                     Text("Swipe down to edit times")
                         .font(.system(size: 13, weight: .bold))
-                        .foregroundColor(Theme.primaryBlue)
+                        .foregroundColor(swipeHintBright ? Color.white : Theme.primaryBlue)
+                        .scaleEffect(swipeHintScale)
                 }
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity)
@@ -289,7 +295,8 @@ struct ExpandedCalendarView: View {
                         ),
                         otherVoterSlots: legendOtherVoterSlotsByKey,
                         isInteractive: false,
-                        orientation: .slotsOnXAxis
+                        orientation: .slotsOnXAxis,
+                        onBlockedInteraction: triggerSwipeHintAttention
                     )
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -297,6 +304,37 @@ struct ExpandedCalendarView: View {
                 .background(Theme.cardBackground)
                 .cornerRadius(16)
             }
+        }
+    }
+
+    /// Haptic + double pulse on the footer hint when the read-only grid is tapped.
+    private func triggerSwipeHintAttention() {
+        swipeHintAttentionGeneration += 1
+        let generation = swipeHintAttentionGeneration
+
+        func applyPulse(emphasized: Bool) {
+            withAnimation(.spring(response: 0.2, dampingFraction: 0.65)) {
+                swipeHintScale = emphasized ? 1.1 : 1.0
+            }
+            withAnimation(.easeInOut(duration: 0.12)) {
+                swipeHintBright = emphasized
+            }
+        }
+
+        Task { @MainActor in
+            guard generation == swipeHintAttentionGeneration else { return }
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            applyPulse(emphasized: true)
+            try? await Task.sleep(nanoseconds: 135_000_000)
+            guard generation == swipeHintAttentionGeneration else { return }
+            applyPulse(emphasized: false)
+            try? await Task.sleep(nanoseconds: 165_000_000)
+            guard generation == swipeHintAttentionGeneration else { return }
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            applyPulse(emphasized: true)
+            try? await Task.sleep(nanoseconds: 135_000_000)
+            guard generation == swipeHintAttentionGeneration else { return }
+            applyPulse(emphasized: false)
         }
     }
 

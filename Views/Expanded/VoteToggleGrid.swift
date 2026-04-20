@@ -18,6 +18,8 @@ struct VoteToggleGrid: View {
     let otherVoterSlots: [String: [String]]
     var isInteractive: Bool = true
     var orientation: VoteGridOrientation = .daysOnXAxis
+    /// Called when the user taps a cell while `isInteractive` is false (e.g. to steer them to compact).
+    var onBlockedInteraction: (() -> Void)? = nil
 
     var body: some View {
         Group {
@@ -149,7 +151,12 @@ struct VoteToggleGrid: View {
                 }
                 .buttonStyle(.plain)
             } else {
-                slotCellBody(fill: fill, otherColors: otherColors, isSelf: isSelf)
+                Button {
+                    onBlockedInteraction?()
+                } label: {
+                    slotCellBody(fill: fill, otherColors: otherColors, isSelf: isSelf)
+                }
+                .buttonStyle(.plain)
             }
         }
     }

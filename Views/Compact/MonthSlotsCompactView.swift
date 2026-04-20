@@ -50,10 +50,7 @@ struct MonthSlotsCompactView: View {
     }
 
     private var toolbar: some View {
-        // progress 0 → 1 as user drags up toward activation threshold
-        let progress = min(max(swipeUpDragMagnitude / expandSwipeUpThreshold, 0), 1)
-
-        return VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 8) {
             if let title = payload.schedule.title, !title.trimmingCharacters(in: .whitespaces).isEmpty {
                 Text(title)
                     .font(.system(size: 17, weight: .semibold))
