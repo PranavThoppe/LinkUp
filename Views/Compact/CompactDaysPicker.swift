@@ -18,7 +18,7 @@ struct CompactDaysPicker: View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Pick Days")
                 .font(.system(size: 18, weight: .bold))
-                .foregroundColor(Theme.voteGreenHigh)
+                .foregroundColor(Theme.primaryBlue)
 
             Spacer(minLength: 0)
 
@@ -28,7 +28,6 @@ struct CompactDaysPicker: View {
                     .datePickerStyle(.compact)
                     .labelsHidden()
                     .colorScheme(.dark)
-                    .accentColor(Theme.voteGreenHigh)
                     .padding(.horizontal, 8)
                     .background(Theme.cardBackground)
                     .cornerRadius(12)
@@ -43,7 +42,7 @@ struct CompactDaysPicker: View {
                         .frame(height: 32)
                         .background(
                             selectedDatesIso.contains(pendingIso)
-                                ? Theme.cellDefault
+                                ? Theme.primaryBlue.opacity(0.35)
                                 : Theme.primaryBlue
                         )
                         .cornerRadius(16)
@@ -61,17 +60,17 @@ struct CompactDaysPicker: View {
                 HStack {
                     Text("Selected")
                         .font(.system(size: 12, weight: .bold))
-                        .foregroundColor(Theme.voteGreenHigh)
+                        .foregroundColor(Theme.primaryBlue)
                     Spacer()
                     Text("\(selectedDatesIso.count)")
                         .font(.system(size: 12, weight: .heavy))
-                        .foregroundColor(Theme.voteGreenHigh)
+                        .foregroundColor(Theme.primaryBlue)
                 }
 
                 if selectedDatesIso.isEmpty {
                     Text("Your chosen days appear below.")
                         .font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(Theme.textSecondary)
+                        .foregroundColor(Theme.messageBubbleBlue)
                         .padding(.top, 2)
                 } else {
                     ScrollView(.horizontal, showsIndicators: false) {
@@ -103,7 +102,7 @@ struct CompactDaysPicker: View {
                     .font(.system(size: 13, weight: .heavy))
                     .foregroundColor(.white)
                     .frame(width: 16, height: 16)
-                    .background(Theme.cellDefault)
+                    .background(Theme.primaryBlue.opacity(0.55))
                     .clipShape(Circle())
             }
             .buttonStyle(.plain)
@@ -111,7 +110,7 @@ struct CompactDaysPicker: View {
         .padding(.leading, 8)
         .padding(.trailing, 4)
         .frame(height: 28)
-        .background(Theme.cardBackground)
+        .background(Theme.primaryBlue.opacity(0.28))
         .clipShape(Capsule())
     }
 

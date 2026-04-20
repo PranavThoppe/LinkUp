@@ -22,7 +22,7 @@ struct CompactWeekPicker: View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Pick Date Range")
                 .font(.system(size: isScrollable ? 18 : 16, weight: .bold))
-                .foregroundColor(Theme.voteGreenHigh)
+                .foregroundColor(Theme.primaryBlue)
 
             // Day-of-week header
             HStack(spacing: 0) {

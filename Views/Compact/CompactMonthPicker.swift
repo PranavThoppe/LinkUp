@@ -15,7 +15,7 @@ struct CompactMonthPicker: View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Pick Months")
                 .font(.system(size: 18, weight: .bold))
-                .foregroundColor(Theme.voteGreenHigh)
+                .foregroundColor(Theme.primaryBlue)
 
             Text(selectedMonths.isEmpty ? "Tap months to include" : "\(selectedMonths.count) selected")
                 .font(.system(size: 13, weight: .semibold))
