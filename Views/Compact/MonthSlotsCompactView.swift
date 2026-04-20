@@ -7,7 +7,6 @@ struct MonthSlotsCompactView: View {
     let onSave: (MessagePayload) -> Void
     let onExpand: () -> Void
 
-    @State private var focusedDate: String = ""
     /// How far the user has dragged upward (points); used for progress and label offset.
     @State private var swipeUpDragMagnitude: CGFloat = 0
 
@@ -20,7 +19,7 @@ struct MonthSlotsCompactView: View {
     }
 
     private var focusedDayColumns: [String] {
-        focusedDate.isEmpty ? [] : [focusedDate]
+        voteDraft.focusedDayIso.isEmpty ? [] : [voteDraft.focusedDayIso]
     }
 
     var body: some View {
@@ -43,10 +42,10 @@ struct MonthSlotsCompactView: View {
         }
         .background(Theme.background)
         .onAppear {
-            syncFocusedDate()
+            voteDraft.syncFocusedDayWithSelection()
         }
         .onChange(of: sortedDates) { _, _ in
-            syncFocusedDate()
+            voteDraft.syncFocusedDayWithSelection()
         }
     }
 
@@ -63,12 +62,9 @@ struct MonthSlotsCompactView: View {
             ZStack {
                 Text("Swipe up for calendar")
                     .font(.system(size: 15, weight: .bold))
-                    .foregroundColor(Theme.textSecondary)
-                    .opacity(1 - progress)
-                Text("Swipe up for calendar")
-                    .font(.system(size: 15, weight: .bold))
                     .foregroundColor(Theme.primaryBlue)
-                    .opacity(progress)
+                    .opacity(1)
+               
             }
             .multilineTextAlignment(.center)
             .frame(maxWidth: .infinity)
@@ -121,7 +117,7 @@ struct MonthSlotsCompactView: View {
 
     private var content: some View {
         VStack(spacing: 10) {
-            Picker("Day", selection: $focusedDate) {
+            Picker("Day", selection: $voteDraft.focusedDayIso) {
                 ForEach(sortedDates, id: \.self) { iso in
                     Text(slotPickerTitle(iso)).tag(iso)
                 }
@@ -172,16 +168,6 @@ struct MonthSlotsCompactView: View {
         }
         .buttonStyle(.plain)
         .disabled(sortedDates.isEmpty)
-    }
-
-    private func syncFocusedDate() {
-        guard !sortedDates.isEmpty else {
-            focusedDate = ""
-            return
-        }
-        if !sortedDates.contains(focusedDate) {
-            focusedDate = sortedDates[0]
-        }
     }
 
     private func slotPickerTitle(_ iso: String) -> String {

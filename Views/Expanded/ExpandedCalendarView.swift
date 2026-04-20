@@ -8,7 +8,6 @@ struct ExpandedCalendarView: View {
     let onCollapseToCompact: (() -> Void)?
 
     @State private var focusedMonthIndex: Int = 0
-    @State private var focusedLegendDate: String = ""
     @State private var collapseHintOffset: CGFloat = 0
     @State private var isCollapseAnimationRunning = false
     /// Upward drag on toolbar (points); drives footer hint color before collapse completes.
@@ -67,12 +66,7 @@ struct ExpandedCalendarView: View {
                 ZStack {
                     Text("Swipe down to edit times")
                         .font(.system(size: 13, weight: .bold))
-                        .foregroundColor(Theme.textSecondary)
-                        .opacity(1 - collapseFooterHintBlueProgress)
-                    Text("Swipe down to edit times")
-                        .font(.system(size: 13, weight: .bold))
                         .foregroundColor(Theme.primaryBlue)
-                        .opacity(collapseFooterHintBlueProgress)
                 }
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity)
@@ -85,7 +79,7 @@ struct ExpandedCalendarView: View {
         .background(Theme.background)
         .onAppear {
             clampFocusedMonthIndex()
-            syncFocusedLegendDate()
+            voteDraft.syncFocusedDayWithSelection()
             collapseHintOffset = 0
             isCollapseAnimationRunning = false
             collapseToolbarSwipeMagnitude = 0
@@ -94,7 +88,7 @@ struct ExpandedCalendarView: View {
             clampFocusedMonthIndex()
         }
         .onChange(of: voteDraft.sortedDates) { _, _ in
-            syncFocusedLegendDate()
+            voteDraft.syncFocusedDayWithSelection()
         }
     }
 
@@ -229,11 +223,11 @@ struct ExpandedCalendarView: View {
             let iso = toISODate(year: month.year, month: month.month, day: cell.day)
             let isSelf = voteDraft.selectedDates.contains(iso)
             let otherColors = otherVoterColorsByDate[iso] ?? []
-            let bgColor: Color = isSelf
-                ? Theme.primaryBlue
-                : (otherColors.isEmpty
-                    ? Theme.cellDefault
-                    : VoteHeatmap.color(for: otherColors.count, maxCount: maxOtherVotes))
+            let hasOthers = !otherColors.isEmpty
+            let baseFill: Color = hasOthers
+                ? VoteHeatmap.color(for: otherColors.count, maxCount: maxOtherVotes)
+                : Theme.cellDefault
+            let fill: Color = (isSelf && !hasOthers) ? Theme.voteGreenHigh : baseFill
 
             Button {
                 voteDraft.toggleDate(iso)
@@ -241,8 +235,15 @@ struct ExpandedCalendarView: View {
                 VStack(spacing: 2) {
                     ZStack {
                         RoundedRectangle(cornerRadius: 8)
-                            .fill(bgColor)
+                            .fill(fill)
                             .frame(width: 36, height: 36)
+                            .overlay {
+                                if isSelf {
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .inset(by: 1)
+                                        .stroke(Theme.primaryBlue, lineWidth: 4)
+                                }
+                            }
                         Text(verbatim: "\(cell.day)")
                             .font(.system(size: 14, weight: .semibold))
                             .foregroundColor(.white)
@@ -254,6 +255,8 @@ struct ExpandedCalendarView: View {
                 .padding(.vertical, 4)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(dayCellAccessibilityLabel(day: cell.day, isSelected: isSelf))
+            .accessibilityAddTraits(isSelf ? .isSelected : [])
         } else {
             Color.clear
                 .frame(maxWidth: .infinity)
@@ -269,7 +272,7 @@ struct ExpandedCalendarView: View {
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundColor(Theme.textSecondary)
 
-                    Picker("Day", selection: $focusedLegendDate) {
+                    Picker("Day", selection: $voteDraft.focusedDayIso) {
                         ForEach(voteDraft.sortedDates, id: \.self) { iso in
                             Text(slotPickerTitle(iso)).tag(iso)
                         }
@@ -280,8 +283,11 @@ struct ExpandedCalendarView: View {
                     VoteToggleGrid(
                         dayColumns: focusedLegendDayColumns,
                         slotLabels: slotLabels,
-                        selectedSlots: .constant(Set<String>()),
-                        otherVoterSlots: totalVoterSlotsByKey,
+                        selectedSlots: Binding(
+                            get: { voteDraft.selectedSlotKeys },
+                            set: { _ in }
+                        ),
+                        otherVoterSlots: legendOtherVoterSlotsByKey,
                         isInteractive: false,
                         orientation: .slotsOnXAxis
                     )
@@ -311,11 +317,12 @@ struct ExpandedCalendarView: View {
         max(otherVoterColorsByDate.values.map(\.count).max() ?? 0, 1)
     }
 
-    private var totalVoterSlotsByKey: [String: [String]] {
-        guard !focusedLegendDate.isEmpty else { return [:] }
+    /// Other participants' slot votes for the focused legend day (excludes self so heatmap + ring match the calendar).
+    private var legendOtherVoterSlotsByKey: [String: [String]] {
+        guard !voteDraft.focusedDayIso.isEmpty else { return [:] }
         var map: [String: [String]] = [:]
-        for vote in payload.votes {
-            for slot in vote.slots ?? [] where slot.date == focusedLegendDate {
+        for vote in payload.votes where vote.senderId != selfSenderId {
+            for slot in vote.slots ?? [] where slot.date == voteDraft.focusedDayIso {
                 let key = makeSlotKey(date: slot.date, slotIndex: slot.slotIndex)
                 map[key, default: []].append(vote.senderColor)
             }
@@ -333,18 +340,7 @@ struct ExpandedCalendarView: View {
     }
 
     private var focusedLegendDayColumns: [String] {
-        focusedLegendDate.isEmpty ? [] : [focusedLegendDate]
-    }
-
-    private func syncFocusedLegendDate() {
-        let sortedDates = voteDraft.sortedDates
-        guard !sortedDates.isEmpty else {
-            focusedLegendDate = ""
-            return
-        }
-        if !sortedDates.contains(focusedLegendDate) {
-            focusedLegendDate = sortedDates[0]
-        }
+        voteDraft.focusedDayIso.isEmpty ? [] : [voteDraft.focusedDayIso]
     }
 
     private func chipTitle(for month: MonthYear) -> String {
@@ -362,6 +358,11 @@ struct ExpandedCalendarView: View {
             ? monthName(month.month)
             : "\(monthName(month.month)) \(month.year)"
         return isSelected ? "\(base), selected" : base
+    }
+
+    private func dayCellAccessibilityLabel(day: Int, isSelected: Bool) -> String {
+        let n = "\(day)"
+        return isSelected ? "\(n), selected, your availability" : n
     }
 
     private func slotPickerTitle(_ iso: String) -> String {

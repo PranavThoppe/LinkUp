@@ -8,7 +8,8 @@ enum VoteGridOrientation {
 /// Tappable slot grid shared by ExpandedWeekView and ExpandedDaysView.
 ///
 /// Columns are ISO date strings. Each cell is keyed `"date#slotIndex"`.
-/// Self-selected cells render blue; others' votes render as a green heatmap.
+/// Self-selected cells use solid green when alone on that slot, else the same heatmap as others,
+/// always with a blue ring. `otherVoterSlots` must exclude the current user for correct heat.
 struct VoteToggleGrid: View {
     let dayColumns: [String]
     let slotLabels: [String]
@@ -127,11 +128,11 @@ struct VoteToggleGrid: View {
         let key = "\(date)#\(slotIndex)"
         let isSelf = selectedSlots.contains(key)
         let otherColors = otherVoterSlots[key] ?? []
-        let bgColor: Color = isSelf
-            ? Theme.primaryBlue
-            : (otherColors.isEmpty
-                ? Theme.cellDefault
-                : VoteHeatmap.color(for: otherColors.count, maxCount: maxOtherVotes))
+        let hasOthers = !otherColors.isEmpty
+        let baseFill: Color = hasOthers
+            ? VoteHeatmap.color(for: otherColors.count, maxCount: maxOtherVotes)
+            : Theme.cellDefault
+        let fill: Color = (isSelf && !hasOthers) ? Theme.voteGreenHigh : baseFill
 
         Group {
             if isInteractive {
@@ -144,20 +145,27 @@ struct VoteToggleGrid: View {
                     }
                     selectedSlots = next
                 } label: {
-                    slotCellBody(bgColor: bgColor, otherColors: otherColors, isSelf: isSelf)
+                    slotCellBody(fill: fill, otherColors: otherColors, isSelf: isSelf)
                 }
                 .buttonStyle(.plain)
             } else {
-                slotCellBody(bgColor: bgColor, otherColors: otherColors, isSelf: isSelf)
+                slotCellBody(fill: fill, otherColors: otherColors, isSelf: isSelf)
             }
         }
     }
 
-    private func slotCellBody(bgColor: Color, otherColors: [String], isSelf: Bool) -> some View {
+    private func slotCellBody(fill: Color, otherColors: [String], isSelf: Bool) -> some View {
         ZStack(alignment: .bottom) {
             RoundedRectangle(cornerRadius: 6)
-                .fill(bgColor)
-            if !otherColors.isEmpty && !isSelf {
+                .fill(fill)
+                .overlay {
+                    if isSelf {
+                        RoundedRectangle(cornerRadius: 6)
+                            .inset(by: 1)
+                            .stroke(Theme.primaryBlue, lineWidth: 4)
+                    }
+                }
+            if !otherColors.isEmpty {
                 VoterDots(colors: otherColors, maxVisible: 2)
                     .padding(.bottom, 4)
             }

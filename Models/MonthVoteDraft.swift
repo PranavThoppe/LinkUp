@@ -5,6 +5,8 @@ import Combine
 final class MonthVoteDraft: ObservableObject {
     @Published var selectedDates: Set<String>
     @Published var selectedSlotKeys: Set<String>
+    /// ISO day key for slot editing (expanded legend picker + compact day picker).
+    @Published var focusedDayIso: String = ""
 
     init(selectedDates: Set<String>, selectedSlotKeys: Set<String>) {
         self.selectedDates = selectedDates
@@ -24,6 +26,17 @@ final class MonthVoteDraft: ObservableObject {
         selectedDates.sorted()
     }
 
+    func syncFocusedDayWithSelection() {
+        let dates = sortedDates
+        guard !dates.isEmpty else {
+            focusedDayIso = ""
+            return
+        }
+        if !dates.contains(focusedDayIso) {
+            focusedDayIso = dates[0]
+        }
+    }
+
     func toggleDate(_ isoDate: String) {
         if selectedDates.contains(isoDate) {
             selectedDates.remove(isoDate)
@@ -31,6 +44,7 @@ final class MonthVoteDraft: ObservableObject {
         } else {
             selectedDates.insert(isoDate)
         }
+        syncFocusedDayWithSelection()
     }
 
     var filteredSortedSlots: [SlotSelection] {
