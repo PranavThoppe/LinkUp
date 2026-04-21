@@ -127,6 +127,47 @@ func dateRangeInclusive(startIso: String, endIso: String) -> [String] {
     return values
 }
 
+/// Number of calendar days in `[startIso, endIso]` inclusive. Returns `0` if the range is invalid or empty.
+func inclusiveDayCountInRange(startIso: String, endIso: String) -> Int {
+    dateRangeInclusive(startIso: startIso, endIso: endIso).count
+}
+
+/// Distinct `MonthYear` values touched by the inclusive date range, in chronological order (first day of each month in range).
+func uniqueMonthYearsInInclusiveDateRange(startIso: String, endIso: String) -> [MonthYear] {
+    let days = dateRangeInclusive(startIso: startIso, endIso: endIso)
+    var result: [MonthYear] = []
+    var seenKeys = Set<String>()
+    for iso in days {
+        guard let (y, m, _) = parseISODate(iso) else { continue }
+        let key = "\(y)-\(m)"
+        if seenKeys.insert(key).inserted {
+            result.append(MonthYear(month: m, year: y))
+        }
+    }
+    return result
+}
+
+/// Distinct `MonthYear` values for the given ISO date strings, in chronological order.
+func uniqueMonthYears(fromSortedIsoDates isos: [String]) -> [MonthYear] {
+    var result: [MonthYear] = []
+    var seenKeys = Set<String>()
+    for iso in isos {
+        guard let (y, m, _) = parseISODate(iso) else { continue }
+        let key = "\(y)-\(m)"
+        if seenKeys.insert(key).inserted {
+            result.append(MonthYear(month: m, year: y))
+        }
+    }
+    return result
+}
+
+/// Week ranges of this many days or longer are composed as `month` schedules (calendar UX) instead of `week`.
+let longWeekRangeInclusiveDayThreshold = 11
+/// Days-tab selections with at least this many days convert to month + explicit eligible dates on send.
+let longDaysSelectionCountThreshold = 11
+/// Days-tab selections spanning this many distinct calendar months convert to month + explicit eligible dates on send.
+let daysSelectionMultiMonthThreshold = 2
+
 /// Returns the ISO date string for today (YYYY-MM-DD) in the local calendar.
 func todayISODate() -> String {
     let now = Date()

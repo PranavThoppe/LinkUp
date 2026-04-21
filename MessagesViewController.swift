@@ -198,6 +198,8 @@ class MessagesViewController: MSMessagesAppViewController {
             months: partialSchedule.months,
             weekRange: partialSchedule.weekRange,
             specificDates: partialSchedule.specificDates,
+            eligibleDateRange: partialSchedule.eligibleDateRange,
+            eligibleSpecificDates: partialSchedule.eligibleSpecificDates,
             createdAt: partialSchedule.createdAt,
             updatedAt: Date(),
             isActive: partialSchedule.isActive

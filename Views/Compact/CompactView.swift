@@ -137,6 +137,58 @@ struct CompactView: View {
         let now = Date()
         let trimmedTitle = draft.scheduleTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         // Derive creatorId: will be replaced with real senderId in MessagesViewController
+
+        if draft.selectedTab == .week,
+           let start = draft.weekStartIso,
+           let end = draft.weekEndIso,
+           start <= end,
+           inclusiveDayCountInRange(startIso: start, endIso: end) >= longWeekRangeInclusiveDayThreshold {
+            let months = uniqueMonthYearsInInclusiveDateRange(startIso: start, endIso: end)
+            if !months.isEmpty {
+                return Schedule(
+                    id: UUID(),
+                    creatorId: "",
+                    mode: .month,
+                    title: trimmedTitle.isEmpty ? nil : trimmedTitle,
+                    months: months,
+                    weekRange: nil,
+                    specificDates: nil,
+                    eligibleDateRange: DateRange(startIso: start, endIso: end),
+                    eligibleSpecificDates: nil,
+                    createdAt: now,
+                    updatedAt: now,
+                    isActive: true
+                )
+            }
+        }
+
+        if draft.selectedTab == .days, !draft.selectedDatesIso.isEmpty {
+            let sortedUnique = Array(Set(draft.selectedDatesIso)).sorted()
+            let monthCount = uniqueMonthYears(fromSortedIsoDates: sortedUnique).count
+            let shouldConvertToMonth =
+                sortedUnique.count >= longDaysSelectionCountThreshold
+                || monthCount >= daysSelectionMultiMonthThreshold
+            if shouldConvertToMonth {
+                let months = uniqueMonthYears(fromSortedIsoDates: sortedUnique)
+                if !months.isEmpty {
+                    return Schedule(
+                        id: UUID(),
+                        creatorId: "",
+                        mode: .month,
+                        title: trimmedTitle.isEmpty ? nil : trimmedTitle,
+                        months: months,
+                        weekRange: nil,
+                        specificDates: nil,
+                        eligibleDateRange: nil,
+                        eligibleSpecificDates: sortedUnique,
+                        createdAt: now,
+                        updatedAt: now,
+                        isActive: true
+                    )
+                }
+            }
+        }
+
         return Schedule(
             id: UUID(),
             creatorId: "",   // filled in by MessagesViewController using localParticipantIdentifier
@@ -147,6 +199,8 @@ struct CompactView: View {
                 ? (draft.weekStartIso.map { s in DateRange(startIso: s, endIso: draft.weekEndIso ?? s) })
                 : nil,
             specificDates: draft.selectedTab == .days ? draft.selectedDatesIso : nil,
+            eligibleDateRange: nil,
+            eligibleSpecificDates: nil,
             createdAt: now,
             updatedAt: now,
             isActive: true

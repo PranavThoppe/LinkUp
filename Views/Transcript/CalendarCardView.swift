@@ -6,6 +6,14 @@ struct CalendarCardView: View {
 
     private let weekdayLabels = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"]
 
+    private var scheduleEligiblePollDates: Set<String>? {
+        payload.schedule.eligiblePollDates
+    }
+
+    private func isInEligiblePoll(iso: String) -> Bool {
+        scheduleEligiblePollDates?.contains(iso) ?? true
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             headerView
@@ -90,29 +98,51 @@ struct CalendarCardView: View {
 
     @ViewBuilder
     private func dayCell(cell: CalendarCell, month: MonthYear) -> some View {
-        let iso = cell.inMonth ? toISODate(year: month.year, month: month.month, day: cell.day) : ""
-        let voters = cell.inMonth ? (voterColorsByDate[iso] ?? []) : []
-        let bgColor = VoteHeatmap.color(for: voters.count, maxCount: maxDateVotes)
+        if cell.inMonth {
+            let iso = toISODate(year: month.year, month: month.month, day: cell.day)
+            let inPoll = isInEligiblePoll(iso: iso)
+            let voters = inPoll ? (voterColorsByDate[iso] ?? []) : []
+            let bgColor = inPoll
+                ? VoteHeatmap.color(for: voters.count, maxCount: maxDateVotes)
+                : Theme.cellDefault.opacity(0.28)
 
-        VStack(spacing: 0) {
-            // Date badge — vote color on badge only, not the whole cell
-            ZStack {
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(bgColor)
-                    .frame(width: 28, height: 28)
-                Text(verbatim: "\(cell.day)")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.white)
+            VStack(spacing: 0) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(bgColor)
+                        .frame(width: 28, height: 28)
+                    Text(verbatim: "\(cell.day)")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(inPoll ? .white : Theme.textSecondary.opacity(0.55))
+                        .strikethrough(!inPoll, color: Theme.textSecondary.opacity(0.65))
+                }
+
+                VoterDots(colors: voters, maxVisible: 3)
+                    .frame(height: 14)
+                    .frame(maxWidth: .infinity)
             }
-            .opacity(cell.inMonth ? 1.0 : 0.45)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
+        } else {
+            VStack(spacing: 0) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Theme.cellDefault)
+                        .frame(width: 28, height: 28)
+                        .opacity(0.45)
+                    Text(verbatim: "\(cell.day)")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.white)
+                }
+                .opacity(0.45)
 
-            // Dot row — always reserve height so rows stay uniform
-            VoterDots(colors: voters, maxVisible: 3)
-                .frame(height: 14)
-                .frame(maxWidth: .infinity)
+                VoterDots(colors: [], maxVisible: 3)
+                    .frame(height: 14)
+                    .frame(maxWidth: .infinity)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 8)
     }
 
     // MARK: - Footer
@@ -164,7 +194,9 @@ struct CalendarCardView: View {
     }
 
     private var maxDateVotes: Int {
-        max(voterColorsByDate.values.map(\.count).max() ?? 0, 1)
+        let allowed = scheduleEligiblePollDates
+        let relevant = voterColorsByDate.filter { allowed == nil || allowed!.contains($0.key) }
+        return max(relevant.values.map(\.count).max() ?? 0, 1)
     }
 
     private var votedParticipants: [Participant] {

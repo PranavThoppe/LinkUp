@@ -3,14 +3,27 @@ import Combine
 
 
 final class MonthVoteDraft: ObservableObject {
+    /// When non-nil, only these ISO days may be added to the vote (month schedules with a restricted window).
+    let eligiblePollDates: Set<String>?
+
     @Published var selectedDates: Set<String>
     @Published var selectedSlotKeys: Set<String>
     /// ISO day key for slot editing (expanded legend picker + compact day picker).
     @Published var focusedDayIso: String = ""
 
-    init(selectedDates: Set<String>, selectedSlotKeys: Set<String>) {
-        self.selectedDates = selectedDates
-        self.selectedSlotKeys = selectedSlotKeys
+    init(selectedDates: Set<String>, selectedSlotKeys: Set<String>, eligiblePollDates: Set<String>? = nil) {
+        self.eligiblePollDates = eligiblePollDates
+        if let allowed = eligiblePollDates {
+            self.selectedDates = selectedDates.intersection(allowed)
+            self.selectedSlotKeys = Set(
+                selectedSlotKeys.filter { key in
+                    parseSlotKey(key).map { allowed.contains($0.date) } ?? false
+                }
+            )
+        } else {
+            self.selectedDates = selectedDates
+            self.selectedSlotKeys = selectedSlotKeys
+        }
     }
 
     convenience init(payload: MessagePayload, selfSenderId: String) {
@@ -19,7 +32,11 @@ final class MonthVoteDraft: ObservableObject {
         let slotDates = Set(slots.map(\.date))
         let selectedDates = Set(existing?.dates ?? []).union(slotDates)
         let slotKeys = Set(slots.map { makeSlotKey(date: $0.date, slotIndex: $0.slotIndex) })
-        self.init(selectedDates: selectedDates, selectedSlotKeys: slotKeys)
+        self.init(
+            selectedDates: selectedDates,
+            selectedSlotKeys: slotKeys,
+            eligiblePollDates: payload.schedule.eligiblePollDates
+        )
     }
 
     var sortedDates: [String] {
@@ -42,6 +59,7 @@ final class MonthVoteDraft: ObservableObject {
             selectedDates.remove(isoDate)
             selectedSlotKeys = selectedSlotKeys.filter { !($0.hasPrefix("\(isoDate)#")) }
         } else {
+            if let allowed = eligiblePollDates, !allowed.contains(isoDate) { return }
             selectedDates.insert(isoDate)
         }
         syncFocusedDayWithSelection()
@@ -78,8 +96,20 @@ func buildUpdatedMonthPayload(
     selectedDates: Set<String>,
     selectedSlotKeys: Set<String>
 ) -> MessagePayload {
-    let slots = monthSlotSelections(from: selectedSlotKeys, allowedDates: selectedDates)
-    let sortedDates = selectedDates.sorted()
+    let coercedDates: Set<String>
+    let coercedKeySet: Set<String>
+    if let pollDates = payload.schedule.eligiblePollDates {
+        coercedDates = selectedDates.intersection(pollDates)
+        coercedKeySet = Set(selectedSlotKeys.filter { key in
+            parseSlotKey(key).map { pollDates.contains($0.date) } ?? false
+        })
+    } else {
+        coercedDates = selectedDates
+        coercedKeySet = selectedSlotKeys
+    }
+
+    let slots = monthSlotSelections(from: coercedKeySet, allowedDates: coercedDates)
+    let sortedDates = coercedDates.sorted()
 
     let (selfColor, selfInitial, updatedParticipants) = resolvedMonthSelfIdentity(
         payload: payload,

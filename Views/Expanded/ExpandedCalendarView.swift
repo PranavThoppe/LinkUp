@@ -31,6 +31,15 @@ struct ExpandedCalendarView: View {
         scheduleMonths.map { "\($0.year)-\($0.month)" }.joined(separator: "|")
     }
 
+    /// When set, only these ISO days are in the poll (rest of month grid is non-interactive).
+    private var scheduleEligiblePollDates: Set<String>? {
+        payload.schedule.eligiblePollDates
+    }
+
+    private func isInEligiblePoll(iso: String) -> Bool {
+        scheduleEligiblePollDates?.contains(iso) ?? true
+    }
+
     private var collapseFooterHintBlueProgress: CGFloat {
         min(max(collapseToolbarSwipeMagnitude / collapseSwipeColorThreshold, 0), 1)
     }
@@ -227,47 +236,74 @@ struct ExpandedCalendarView: View {
     private func dayCell(cell: CalendarCell, month: MonthYear) -> some View {
         if cell.inMonth {
             let iso = toISODate(year: month.year, month: month.month, day: cell.day)
-            let isSelf = voteDraft.selectedDates.contains(iso)
-            let otherColors = otherVoterColorsByDate[iso] ?? []
-            let hasOthers = !otherColors.isEmpty
-            let baseFill: Color = hasOthers
-                ? VoteHeatmap.color(for: otherColors.count, maxCount: maxOtherVotes)
-                : Theme.cellDefault
-            let fill: Color = (isSelf && !hasOthers) ? Theme.voteGreenHigh : baseFill
-
-            Button {
-                voteDraft.toggleDate(iso)
-            } label: {
-                VStack(spacing: 2) {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(fill)
-                            .frame(width: 36, height: 36)
-                            .overlay {
-                                if isSelf {
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .inset(by: 1)
-                                        .stroke(Theme.primaryBlue, lineWidth: 4)
-                                }
-                            }
-                        Text(verbatim: "\(cell.day)")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundColor(.white)
-                    }
-                    VoterDots(colors: otherColors, maxVisible: 3)
-                        .frame(height: 12)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 4)
+            if isInEligiblePoll(iso: iso) {
+                expandedInteractiveDayCell(iso: iso, dayNumber: cell.day)
+            } else {
+                expandedExcludedPollDayCell(dayNumber: cell.day)
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel(dayCellAccessibilityLabel(day: cell.day, isSelected: isSelf))
-            .accessibilityAddTraits(isSelf ? .isSelected : [])
         } else {
             Color.clear
                 .frame(maxWidth: .infinity)
                 .frame(height: 56)
         }
+    }
+
+    @ViewBuilder
+    private func expandedInteractiveDayCell(iso: String, dayNumber: Int) -> some View {
+        let isSelf = voteDraft.selectedDates.contains(iso)
+        let otherColors = otherVoterColorsByDate[iso] ?? []
+        let hasOthers = !otherColors.isEmpty
+        let baseFill: Color = hasOthers
+            ? VoteHeatmap.color(for: otherColors.count, maxCount: maxOtherVotes)
+            : Theme.cellDefault
+        let fill: Color = (isSelf && !hasOthers) ? Theme.voteGreenHigh : baseFill
+
+        Button {
+            voteDraft.toggleDate(iso)
+        } label: {
+            VStack(spacing: 2) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(fill)
+                        .frame(width: 36, height: 36)
+                        .overlay {
+                            if isSelf {
+                                RoundedRectangle(cornerRadius: 8)
+                                    .inset(by: 1)
+                                    .stroke(Theme.primaryBlue, lineWidth: 4)
+                            }
+                        }
+                    Text(verbatim: "\(dayNumber)")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.white)
+                }
+                VoterDots(colors: otherColors, maxVisible: 3)
+                    .frame(height: 12)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 4)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(dayCellAccessibilityLabel(day: dayNumber, isSelected: isSelf))
+        .accessibilityAddTraits(isSelf ? .isSelected : [])
+    }
+
+    private func expandedExcludedPollDayCell(dayNumber: Int) -> some View {
+        VStack(spacing: 2) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Theme.cellDefault.opacity(0.28))
+                    .frame(width: 36, height: 36)
+                Text(verbatim: "\(dayNumber)")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(Theme.textSecondary.opacity(0.55))
+                    .strikethrough(true, color: Theme.textSecondary.opacity(0.65))
+            }
+            Color.clear.frame(height: 12)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 4)
+        .accessibilityLabel("\(dayNumber), not part of this poll")
     }
 
     private var slotsInsightCard: some View {
@@ -352,7 +388,9 @@ struct ExpandedCalendarView: View {
     }
 
     private var maxOtherVotes: Int {
-        max(otherVoterColorsByDate.values.map(\.count).max() ?? 0, 1)
+        let allowed = scheduleEligiblePollDates
+        let relevant = otherVoterColorsByDate.filter { allowed == nil || allowed!.contains($0.key) }
+        return max(relevant.values.map(\.count).max() ?? 0, 1)
     }
 
     /// Other participants' slot votes for the focused legend day (excludes self so heatmap + ring match the calendar).
