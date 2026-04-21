@@ -115,11 +115,5 @@ private func resolvedMonthSelfIdentity(
     payload: MessagePayload,
     selfSenderId: String
 ) -> (color: String, initial: String, participants: [Participant]) {
-    if let existing = payload.participants.first(where: { $0.id == selfSenderId }) {
-        return (existing.color, existing.initial, payload.participants)
-    }
-    let color = Participant.color(for: payload.participants.count)
-    let initial = String(selfSenderId.prefix(1)).uppercased()
-    let newParticipant = Participant(id: selfSenderId, initial: initial, color: color)
-    return (color, initial, payload.participants + [newParticipant])
+    resolvedSelfIdentity(payload: payload, selfSenderId: selfSenderId)
 }

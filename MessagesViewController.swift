@@ -14,6 +14,10 @@ class MessagesViewController: MSMessagesAppViewController {
     private let composerDraft = ComposerDraft()
     private var monthVoteDraft: MonthVoteDraft?
     private var monthVoteDraftScheduleId: UUID?
+    private var weekVoteDraft: WeekVoteDraft?
+    private var weekVoteDraftScheduleId: UUID?
+    private var daysVoteDraft: DaysVoteDraft?
+    private var daysVoteDraftScheduleId: UUID?
 
     // MARK: - Hosted SwiftUI controller
 
@@ -243,6 +247,8 @@ class MessagesViewController: MSMessagesAppViewController {
                 payload: payload,
                 selfSenderId: selfSenderId,
                 monthVoteDraft: payload.schedule.mode == .month ? monthVoteDraft(for: payload) : nil,
+                weekVoteDraft: payload.schedule.mode == .week ? weekVoteDraft(for: payload) : nil,
+                daysVoteDraft: payload.schedule.mode == .days ? daysVoteDraft(for: payload) : nil,
                 onDone: { [weak self] updatedPayload in
                     self?.submitVote(updatedPayload, conversation: conversation)
                 },
@@ -365,8 +371,7 @@ class MessagesViewController: MSMessagesAppViewController {
 
     private func monthVoteDraft(for payload: MessagePayload) -> MonthVoteDraft {
         if payload.schedule.mode != .month {
-            let draft = MonthVoteDraft(payload: payload, selfSenderId: selfSenderId)
-            return draft
+            return MonthVoteDraft(payload: payload, selfSenderId: selfSenderId)
         }
         if let existing = monthVoteDraft, monthVoteDraftScheduleId == payload.schedule.id {
             return existing
@@ -377,15 +382,55 @@ class MessagesViewController: MSMessagesAppViewController {
         return draft
     }
 
+    private func weekVoteDraft(for payload: MessagePayload) -> WeekVoteDraft {
+        if let existing = weekVoteDraft, weekVoteDraftScheduleId == payload.schedule.id {
+            return existing
+        }
+        let draft = WeekVoteDraft(payload: payload, selfSenderId: selfSenderId)
+        weekVoteDraft = draft
+        weekVoteDraftScheduleId = payload.schedule.id
+        return draft
+    }
+
+    private func daysVoteDraft(for payload: MessagePayload) -> DaysVoteDraft {
+        if let existing = daysVoteDraft, daysVoteDraftScheduleId == payload.schedule.id {
+            return existing
+        }
+        let draft = DaysVoteDraft(payload: payload, selfSenderId: selfSenderId)
+        daysVoteDraft = draft
+        daysVoteDraftScheduleId = payload.schedule.id
+        return draft
+    }
+
     private func resetMonthVoteDraftIfNeeded(for payload: MessagePayload) {
-        guard payload.schedule.mode == .month else {
+        switch payload.schedule.mode {
+        case .month:
+            if monthVoteDraftScheduleId != payload.schedule.id {
+                monthVoteDraft = MonthVoteDraft(payload: payload, selfSenderId: selfSenderId)
+                monthVoteDraftScheduleId = payload.schedule.id
+            }
+            weekVoteDraft = nil
+            weekVoteDraftScheduleId = nil
+            daysVoteDraft = nil
+            daysVoteDraftScheduleId = nil
+        case .week:
             monthVoteDraft = nil
             monthVoteDraftScheduleId = nil
-            return
-        }
-        if monthVoteDraftScheduleId != payload.schedule.id {
-            monthVoteDraft = MonthVoteDraft(payload: payload, selfSenderId: selfSenderId)
-            monthVoteDraftScheduleId = payload.schedule.id
+            if weekVoteDraftScheduleId != payload.schedule.id {
+                weekVoteDraft = WeekVoteDraft(payload: payload, selfSenderId: selfSenderId)
+                weekVoteDraftScheduleId = payload.schedule.id
+            }
+            daysVoteDraft = nil
+            daysVoteDraftScheduleId = nil
+        case .days:
+            monthVoteDraft = nil
+            monthVoteDraftScheduleId = nil
+            weekVoteDraft = nil
+            weekVoteDraftScheduleId = nil
+            if daysVoteDraftScheduleId != payload.schedule.id {
+                daysVoteDraft = DaysVoteDraft(payload: payload, selfSenderId: selfSenderId)
+                daysVoteDraftScheduleId = payload.schedule.id
+            }
         }
     }
 }

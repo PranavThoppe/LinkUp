@@ -91,9 +91,21 @@ struct WeekCardView: View {
     private var voterColorsBySlot: [String: [String]] {
         var map: [String: [String]] = [:]
         for vote in payload.votes {
+            // Explicit per-slot picks
             for selection in vote.slots ?? [] {
                 let key = slotKey(date: selection.date, slot: selection.slotIndex)
-                map[key, default: []].append(vote.senderColor)
+                if !(map[key, default: []].contains(vote.senderColor)) {
+                    map[key, default: []].append(vote.senderColor)
+                }
+            }
+            // Whole-day picks expand to all slot columns for that date
+            for iso in vote.dates {
+                for slotIdx in 0..<slotLabels.count {
+                    let key = slotKey(date: iso, slot: slotIdx)
+                    if !(map[key, default: []].contains(vote.senderColor)) {
+                        map[key, default: []].append(vote.senderColor)
+                    }
+                }
             }
         }
         return map

@@ -3,19 +3,24 @@ import SwiftUI
 struct ExpandedDaysView: View {
     let payload: MessagePayload
     let selfSenderId: String
+    @ObservedObject var voteDraft: DaysVoteDraft
     let onDone: (MessagePayload) -> Void
 
-    @State private var selectedSlots: Set<String>
-
     private let slotLabels = ["Morn", "Aftn", "Eve", "Night"]
+    /// Mirror of MVP's COMPACT_SCROLL_THRESHOLD (DaysCard.tsx line 56).
+    private let scrollThreshold = 5
+    private let fixedColWidth: CGFloat = 44
 
-    init(payload: MessagePayload, selfSenderId: String, onDone: @escaping (MessagePayload) -> Void) {
+    init(
+        payload: MessagePayload,
+        selfSenderId: String,
+        voteDraft: DaysVoteDraft,
+        onDone: @escaping (MessagePayload) -> Void
+    ) {
         self.payload = payload
         self.selfSenderId = selfSenderId
+        self.voteDraft = voteDraft
         self.onDone = onDone
-        let existing = payload.votes.first { $0.senderId == selfSenderId }
-        let keys = (existing?.slots ?? []).map { "\($0.date)#\($0.slotIndex)" }
-        _selectedSlots = State(initialValue: Set(keys))
     }
 
     var body: some View {
@@ -32,20 +37,13 @@ struct ExpandedDaysView: View {
                             .foregroundColor(Theme.textSecondary)
                             .padding(24)
                     } else {
-                        // Horizontal scroll for wide grids (many specific dates)
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            VoteToggleGrid(
-                                dayColumns: dayColumns,
-                                slotLabels: slotLabels,
-                                selectedSlots: $selectedSlots,
-                                otherVoterSlots: otherVoterSlotsByKey
-                            )
-                            .padding(16)
-                        }
-                        .background(Theme.cardBackground)
-                        .cornerRadius(16)
+                        gridCard
                     }
-                    voterLegend
+
+                    VoterLegendCard(
+                        participants: allVoters,
+                        subtitleForParticipant: legendSubtitle
+                    )
                 }
                 .padding(16)
             }
@@ -53,24 +51,52 @@ struct ExpandedDaysView: View {
         .background(Theme.background)
     }
 
+    // MARK: - Grid card
+
+    @ViewBuilder
+    private var gridCard: some View {
+        let needsScroll = dayColumns.count > scrollThreshold
+        let grid = SlotDayGrid(
+            days: dayColumns,
+            slotLabels: slotLabels,
+            selfWholeDays: voteDraft.selectedDates,
+            selfSlotKeys: voteDraft.selectedSlotKeys,
+            otherVoterSlotsByKey: otherVoterSlotsByKey,
+            otherVoterDaysByIso: otherVoterDaysByIso,
+            showVoterDots: true,
+            colWidth: needsScroll ? fixedColWidth : nil,
+            isInteractive: true,
+            onToggleWholeDay: { voteDraft.toggleWholeDay($0) },
+            onToggleSlot: { voteDraft.toggleSlot(date: $0, slotIndex: $1) }
+        )
+
+        if needsScroll {
+            ScrollView(.horizontal, showsIndicators: false) {
+                grid.padding(16)
+            }
+            .background(Theme.cardBackground)
+            .cornerRadius(16)
+        } else {
+            grid
+                .padding(16)
+                .background(Theme.cardBackground)
+                .cornerRadius(16)
+        }
+    }
+
     // MARK: - Toolbar
 
     private var toolbar: some View {
         HStack(alignment: .center) {
-            VStack(alignment: .leading, spacing: 2) {
-                if let title = payload.schedule.title, !title.trimmingCharacters(in: .whitespaces).isEmpty {
-                    Text(title)
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundColor(Theme.textPrimary)
-                }
-                let count = dayColumns.count
-                Text("\(count) specific day\(count == 1 ? "" : "s")")
-                    .font(.system(size: 13))
-                    .foregroundColor(Theme.textSecondary)
-            }
+            toolbarLeading
             Spacer()
             Button("Save") {
-                onDone(buildUpdatedPayload())
+                onDone(buildUpdatedSlotPayload(
+                    payload: payload,
+                    selfSenderId: selfSenderId,
+                    wholeDayDates: voteDraft.selectedDates,
+                    selectedSlotKeys: voteDraft.selectedSlotKeys
+                ))
             }
             .font(.system(size: 17, weight: .semibold))
             .foregroundColor(Theme.primaryBlue)
@@ -80,44 +106,77 @@ struct ExpandedDaysView: View {
         .background(Theme.background)
     }
 
-    // MARK: - Voter legend
-
-    private var voterLegend: some View {
-        Group {
-            if !allVoters.isEmpty {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("\(allVoters.count) response\(allVoters.count == 1 ? "" : "s")")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(Theme.textSecondary)
-
-                    ForEach(allVoters, id: \.id) { participant in
-                        let count = slotVoteCount(for: participant.id)
-                        HStack(spacing: 10) {
-                            Circle()
-                                .fill(Color(hex: participant.color))
-                                .frame(width: 28, height: 28)
-                                .overlay(
-                                    Text(participant.initial)
-                                        .font(.system(size: 12, weight: .bold))
-                                        .foregroundColor(.white)
-                                )
-                            Text(participant.id == selfSenderId
-                                 ? "You · \(count) slot\(count == 1 ? "" : "s")"
-                                 : "\(participant.initial) · \(count) slot\(count == 1 ? "" : "s")")
-                                .font(.system(size: 14))
-                                .foregroundColor(Theme.textPrimary)
-                        }
-                    }
+    @ViewBuilder
+    private var toolbarLeading: some View {
+        let count = dayColumns.count
+        if hasCustomTitle {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(trimmedTitle)
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundColor(Theme.textPrimary)
+                Text("\(count) specific day\(count == 1 ? "" : "s")")
+                    .font(.system(size: 13))
+                    .foregroundColor(Theme.textSecondary)
+            }
+        } else {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    Image(systemName: "calendar")
+                        .font(.system(size: 11, weight: .bold))
+                    Text("DAYS")
+                        .font(.system(size: 11, weight: .black))
+                        .tracking(0.6)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(16)
-                .background(Theme.cardBackground)
-                .cornerRadius(16)
+                .foregroundColor(Theme.primaryBlue)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Theme.primaryBlue.opacity(0.14))
+                .clipShape(Capsule())
+
+                Text(untitledDaysHeadline)
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundColor(Theme.textPrimary)
             }
         }
     }
 
     // MARK: - Computed
+
+    private var trimmedTitle: String {
+        (payload.schedule.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var hasCustomTitle: Bool {
+        !trimmedTitle.isEmpty
+    }
+
+    private var untitledDaysHeadline: String {
+        let count = dayColumns.count
+        guard count > 0 else { return "Specific Day Availability" }
+        let countText = "\(count) specific day\(count == 1 ? "" : "s")"
+        let monthText = selectedMonthsSummary
+        guard !monthText.isEmpty else { return countText }
+        return "\(countText) · \(monthText)"
+    }
+
+    private var selectedMonthsSummary: String {
+        let uniqueMonths = Array(Set(dayColumns.compactMap { iso -> Int? in
+            guard let (_, month, _) = parseISODate(iso) else { return nil }
+            return month
+        })).sorted()
+        let names = uniqueMonths.map { monthName($0) }
+
+        switch names.count {
+        case 0:
+            return ""
+        case 1:
+            return names[0]
+        case 2:
+            return "\(names[0])–\(names[1])"
+        default:
+            return "\(names[0]), \(names[1]), \(names[2])"
+        }
+    }
 
     private var dayColumns: [String] {
         (payload.schedule.specificDates ?? []).sorted()
@@ -127,8 +186,30 @@ struct ExpandedDaysView: View {
         var map: [String: [String]] = [:]
         for vote in payload.votes where vote.senderId != selfSenderId {
             for slot in vote.slots ?? [] {
-                let key = "\(slot.date)#\(slot.slotIndex)"
+                let key = makeSlotKey(date: slot.date, slotIndex: slot.slotIndex)
                 map[key, default: []].append(vote.senderColor)
+            }
+            for iso in vote.dates {
+                for slotIdx in 0..<slotLabels.count {
+                    let key = makeSlotKey(date: iso, slotIndex: slotIdx)
+                    if !map[key, default: []].contains(vote.senderColor) {
+                        map[key, default: []].append(vote.senderColor)
+                    }
+                }
+            }
+        }
+        return map
+    }
+
+    private var otherVoterDaysByIso: [String: [String]] {
+        var map: [String: [String]] = [:]
+        for vote in payload.votes where vote.senderId != selfSenderId {
+            let activeDays: Set<String> = Set(vote.dates)
+                .union(Set((vote.slots ?? []).map(\.date)))
+            for iso in activeDays {
+                if !map[iso, default: []].contains(vote.senderColor) {
+                    map[iso, default: []].append(vote.senderColor)
+                }
             }
         }
         return map
@@ -139,53 +220,20 @@ struct ExpandedDaysView: View {
         return payload.participants.filter { ids.contains($0.id) }
     }
 
-    private func slotVoteCount(for participantId: String) -> Int {
-        if participantId == selfSenderId { return selectedSlots.count }
-        return payload.votes.first { $0.senderId == participantId }?.slots?.count ?? 0
-    }
-
-    // MARK: - Build updated payload
-
-    private func buildUpdatedPayload() -> MessagePayload {
-        let (selfColor, selfInitial, updatedParticipants) = resolvedSelfIdentity()
-        let slots = selectedSlots.sorted().compactMap { key -> SlotSelection? in
-            let parts = key.split(separator: "#")
-            guard parts.count == 2, let idx = Int(parts[1]) else { return nil }
-            return SlotSelection(date: String(parts[0]), slotIndex: idx)
+    private func legendSubtitle(for participant: Participant) -> String {
+        let isMe = participant.id == selfSenderId
+        let count: Int
+        if isMe {
+            let slotCount = voteDraft.selectedSlotKeys.count
+            let wholeDaySlots = voteDraft.selectedDates.count * slotLabels.count
+            count = slotCount + wholeDaySlots
+        } else {
+            let vote = payload.votes.first { $0.senderId == participant.id }
+            let slots = (vote?.slots ?? []).count
+            let wholeDaySlots = (vote?.dates ?? []).count * slotLabels.count
+            count = slots + wholeDaySlots
         }
-        let existingId = payload.votes.first { $0.senderId == selfSenderId }?.id ?? UUID()
-
-        var updatedVotes = payload.votes.filter { $0.senderId != selfSenderId }
-        if !slots.isEmpty {
-            let newVote = Vote(
-                id: existingId,
-                senderId: selfSenderId,
-                senderInitial: selfInitial,
-                senderColor: selfColor,
-                dates: [],
-                slots: slots,
-                updatedAt: Date()
-            )
-            updatedVotes.append(newVote)
-        }
-
-        return MessagePayload(
-            version: payload.version,
-            schedule: payload.schedule.stampedNow(),
-            votes: updatedVotes,
-            participants: updatedParticipants,
-            revision: payload.revision + 1,
-            lastWriterId: selfSenderId
-        )
-    }
-
-    private func resolvedSelfIdentity() -> (color: String, initial: String, participants: [Participant]) {
-        if let existing = payload.participants.first(where: { $0.id == selfSenderId }) {
-            return (existing.color, existing.initial, payload.participants)
-        }
-        let color = Participant.color(for: payload.participants.count)
-        let initial = String(selfSenderId.prefix(1)).uppercased()
-        let newParticipant = Participant(id: selfSenderId, initial: initial, color: color)
-        return (color, initial, payload.participants + [newParticipant])
+        let label = isMe ? "You" : participant.initial
+        return "\(label) · \(count) slot\(count == 1 ? "" : "s")"
     }
 }
