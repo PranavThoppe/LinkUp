@@ -135,10 +135,6 @@ struct MonthSlotsCompactView: View {
                 )
             }
 
-            Text("This view only shows your votes. Leave all slots empty for no time preference.")
-                .font(.system(size: 12))
-                .foregroundColor(Theme.textSecondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(14)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
