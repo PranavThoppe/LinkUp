@@ -78,7 +78,13 @@ struct ExpandedDaysView: View {
     // MARK: - Toolbar
 
     private var toolbar: some View {
-        HStack(alignment: .center) {
+        let isSaveEnabled = hasSlotVoteChanges(
+            payload: payload,
+            selfSenderId: selfSenderId,
+            wholeDayDates: voteDraft.selectedDates,
+            selectedSlotKeys: voteDraft.selectedSlotKeys
+        )
+        return HStack(alignment: .center) {
             toolbarLeading
             Spacer()
             Button("Save") {
@@ -90,7 +96,8 @@ struct ExpandedDaysView: View {
                 ))
             }
             .font(.system(size: 17, weight: .semibold))
-            .foregroundColor(Theme.primaryBlue)
+            .foregroundColor(isSaveEnabled ? Theme.primaryBlue : Theme.textSecondary.opacity(0.55))
+            .disabled(!isSaveEnabled)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)

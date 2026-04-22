@@ -110,6 +110,12 @@ struct ExpandedCalendarView: View {
     // MARK: - Toolbar
 
     private var toolbar: some View {
+        let isSaveEnabled = hasMonthVoteChanges(
+            payload: payload,
+            selfSenderId: selfSenderId,
+            selectedDates: voteDraft.selectedDates,
+            selectedSlotKeys: voteDraft.selectedSlotKeys
+        )
         let stack = HStack(alignment: .center) {
             VStack(alignment: .leading, spacing: 6) {
                 if let title = payload.schedule.title, !title.trimmingCharacters(in: .whitespaces).isEmpty {
@@ -126,7 +132,8 @@ struct ExpandedCalendarView: View {
                 onDone(buildUpdatedPayload())
             }
             .font(.system(size: 17, weight: .semibold))
-            .foregroundColor(Theme.primaryBlue)
+            .foregroundColor(isSaveEnabled ? Theme.primaryBlue : Theme.textSecondary.opacity(0.55))
+            .disabled(!isSaveEnabled)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
