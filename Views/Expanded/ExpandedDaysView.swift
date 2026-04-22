@@ -7,8 +7,7 @@ struct ExpandedDaysView: View {
     let onDone: (MessagePayload) -> Void
 
     private let slotLabels = ["Morn", "Aftn", "Eve", "Night"]
-    /// Mirror of MVP's COMPACT_SCROLL_THRESHOLD (DaysCard.tsx line 56).
-    private let scrollThreshold = 5
+    private let maxDaysPerRow = 5
     private let fixedColWidth: CGFloat = 44
 
     init(
@@ -53,35 +52,27 @@ struct ExpandedDaysView: View {
 
     // MARK: - Grid card
 
-    @ViewBuilder
     private var gridCard: some View {
-        let needsScroll = dayColumns.count > scrollThreshold
-        let grid = SlotDayGrid(
-            days: dayColumns,
-            slotLabels: slotLabels,
-            selfWholeDays: voteDraft.selectedDates,
-            selfSlotKeys: voteDraft.selectedSlotKeys,
-            otherVoterSlotsByKey: otherVoterSlotsByKey,
-            otherVoterDaysByIso: otherVoterDaysByIso,
-            showVoterDots: true,
-            colWidth: needsScroll ? fixedColWidth : nil,
-            isInteractive: true,
-            onToggleWholeDay: { voteDraft.toggleWholeDay($0) },
-            onToggleSlot: { voteDraft.toggleSlot(date: $0, slotIndex: $1) }
-        )
-
-        if needsScroll {
-            ScrollView(.horizontal, showsIndicators: false) {
-                grid.padding(16)
+        VStack(spacing: 12) {
+            ForEach(dayChunks.indices, id: \.self) { idx in
+                SlotDayGrid(
+                    days: dayChunks[idx],
+                    slotLabels: slotLabels,
+                    selfWholeDays: voteDraft.selectedDates,
+                    selfSlotKeys: voteDraft.selectedSlotKeys,
+                    otherVoterSlotsByKey: otherVoterSlotsByKey,
+                    otherVoterDaysByIso: otherVoterDaysByIso,
+                    showVoterDots: true,
+                    colWidth: fixedColWidth,
+                    isInteractive: true,
+                    onToggleWholeDay: { voteDraft.toggleWholeDay($0) },
+                    onToggleSlot: { voteDraft.toggleSlot(date: $0, slotIndex: $1) }
+                )
             }
-            .background(Theme.cardBackground)
-            .cornerRadius(16)
-        } else {
-            grid
-                .padding(16)
-                .background(Theme.cardBackground)
-                .cornerRadius(16)
         }
+        .padding(16)
+        .background(Theme.cardBackground)
+        .cornerRadius(16)
     }
 
     // MARK: - Toolbar
@@ -180,6 +171,13 @@ struct ExpandedDaysView: View {
 
     private var dayColumns: [String] {
         (payload.schedule.specificDates ?? []).sorted()
+    }
+
+    private var dayChunks: [[String]] {
+        stride(from: 0, to: dayColumns.count, by: maxDaysPerRow).map { start in
+            let end = min(start + maxDaysPerRow, dayColumns.count)
+            return Array(dayColumns[start..<end])
+        }
     }
 
     private var otherVoterSlotsByKey: [String: [String]] {

@@ -7,6 +7,8 @@ struct ExpandedWeekView: View {
     let onDone: (MessagePayload) -> Void
 
     private let slotLabels = ["Morn", "Aftn", "Eve", "Night"]
+    private let maxDaysPerRow = 5
+    private let fixedColWidth: CGFloat = 44
 
     init(
         payload: MessagePayload,
@@ -34,18 +36,23 @@ struct ExpandedWeekView: View {
                             .foregroundColor(Theme.textSecondary)
                             .padding(24)
                     } else {
-                        SlotDayGrid(
-                            days: dayColumns,
-                            slotLabels: slotLabels,
-                            selfWholeDays: voteDraft.selectedDates,
-                            selfSlotKeys: voteDraft.selectedSlotKeys,
-                            otherVoterSlotsByKey: otherVoterSlotsByKey,
-                            otherVoterDaysByIso: otherVoterDaysByIso,
-                            showVoterDots: true,
-                            isInteractive: true,
-                            onToggleWholeDay: { voteDraft.toggleWholeDay($0) },
-                            onToggleSlot: { voteDraft.toggleSlot(date: $0, slotIndex: $1) }
-                        )
+                        VStack(spacing: 12) {
+                            ForEach(dayChunks.indices, id: \.self) { idx in
+                                SlotDayGrid(
+                                    days: dayChunks[idx],
+                                    slotLabels: slotLabels,
+                                    selfWholeDays: voteDraft.selectedDates,
+                                    selfSlotKeys: voteDraft.selectedSlotKeys,
+                                    otherVoterSlotsByKey: otherVoterSlotsByKey,
+                                    otherVoterDaysByIso: otherVoterDaysByIso,
+                                    showVoterDots: true,
+                                    colWidth: fixedColWidth,
+                                    isInteractive: true,
+                                    onToggleWholeDay: { voteDraft.toggleWholeDay($0) },
+                                    onToggleSlot: { voteDraft.toggleSlot(date: $0, slotIndex: $1) }
+                                )
+                            }
+                        }
                         .padding(16)
                         .background(Theme.cardBackground)
                         .cornerRadius(16)
@@ -138,6 +145,13 @@ struct ExpandedWeekView: View {
     private var dayColumns: [String] {
         guard let range = payload.schedule.weekRange else { return [] }
         return dateRangeInclusive(startIso: range.startIso, endIso: range.endIso)
+    }
+
+    private var dayChunks: [[String]] {
+        stride(from: 0, to: dayColumns.count, by: maxDaysPerRow).map { start in
+            let end = min(start + maxDaysPerRow, dayColumns.count)
+            return Array(dayColumns[start..<end])
+        }
     }
 
     private var otherVoterSlotsByKey: [String: [String]] {
