@@ -4,6 +4,7 @@ struct Participant: Codable, Equatable {
     let id: String          // MSConversation participant UUID
     let initial: String
     let color: String       // hex string
+    let name: String?       // display name set by user on first launch
 
     // Fixed palette assigned by thread position (matches MVP participant colors)
     static let palette: [String] = [

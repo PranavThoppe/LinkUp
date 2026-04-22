@@ -31,7 +31,13 @@ class MessagesViewController: MSMessagesAppViewController {
     }
 
     override func willBecomeActive(with conversation: MSConversation) {
+        print("🔑 storedUsername = \(String(describing: storedUsername))")
         super.willBecomeActive(with: conversation)
+
+        guard storedUsername != nil else {
+            presentUsernameSetup()
+            return
+        }
 
         selfSenderId = conversation.localParticipantIdentifier.uuidString
 
@@ -144,6 +150,10 @@ class MessagesViewController: MSMessagesAppViewController {
     // MARK: - UI routing
 
     private func presentUI(for style: MSMessagesAppPresentationStyle, conversation: MSConversation) {
+        guard storedUsername != nil else {
+            presentUsernameSetup()
+            return
+        }
         switch style {
         case .compact:
             presentCompactView(conversation: conversation)
@@ -205,13 +215,15 @@ class MessagesViewController: MSMessagesAppViewController {
             isActive: partialSchedule.isActive
         )
 
-        let selfInitial = deriveInitial(from: selfSenderId)
+        let name = storedUsername ?? selfSenderId
+        let selfInitial = String(name.prefix(1)).uppercased()
         let selfColor = Participant.color(for: 0)
 
         let selfParticipant = Participant(
             id: selfSenderId,
             initial: selfInitial,
-            color: selfColor
+            color: selfColor,
+            name: storedUsername
         )
 
         let payload = MessagePayload(
@@ -341,6 +353,22 @@ class MessagesViewController: MSMessagesAppViewController {
         hostedController = nil
     }
 
+    // MARK: - Username
+
+    private var storedUsername: String? {
+        UserDefaults.standard.string(forKey: "linkup_username")
+    }
+
+    private func presentUsernameSetup() {
+        let setupView = UsernameSetupView { [weak self] name in
+            UserDefaults.standard.set(name, forKey: "linkup_username")
+            guard let self, let conv = self.activeConversation else { return }
+            self.selfSenderId = conv.localParticipantIdentifier.uuidString
+            self.presentUI(for: self.presentationStyle, conversation: conv)
+        }
+        embed(SwiftUI: setupView)
+    }
+
     // MARK: - Helpers
 
     /// Session for `MSMessage`: same session updates the transcript bubble in place; a new session adds a new bubble.
@@ -351,11 +379,6 @@ class MessagesViewController: MSMessagesAppViewController {
               existing.schedule.id == scheduleId
         else { return MSSession() }
         return selected.session ?? MSSession()
-    }
-
-    private func deriveInitial(from senderId: String) -> String {
-        guard let first = senderId.first else { return "?" }
-        return String(first).uppercased()
     }
 
     private func summaryText(for schedule: Schedule) -> String {

@@ -2,6 +2,52 @@ import Foundation
 
 // MARK: - Shared identity resolution
 
+private func existingVoteState(
+    payload: MessagePayload,
+    selfSenderId: String
+) -> (dates: Set<String>, slotKeys: Set<String>) {
+    guard let existing = payload.votes.first(where: { $0.senderId == selfSenderId }) else {
+        return ([], [])
+    }
+
+    let existingDates = Set(existing.dates)
+    let existingSlotKeys = Set((existing.slots ?? []).map { makeSlotKey(date: $0.date, slotIndex: $0.slotIndex) })
+    return (existingDates, existingSlotKeys)
+}
+
+func hasMonthVoteChanges(
+    payload: MessagePayload,
+    selfSenderId: String,
+    selectedDates: Set<String>,
+    selectedSlotKeys: Set<String>
+) -> Bool {
+    let existing = existingVoteState(payload: payload, selfSenderId: selfSenderId)
+
+    let normalizedDates: Set<String>
+    let normalizedSlotKeys: Set<String>
+    if let pollDates = payload.schedule.eligiblePollDates {
+        normalizedDates = selectedDates.intersection(pollDates)
+        normalizedSlotKeys = Set(selectedSlotKeys.filter { key in
+            parseSlotKey(key).map { pollDates.contains($0.date) } ?? false
+        })
+    } else {
+        normalizedDates = selectedDates
+        normalizedSlotKeys = selectedSlotKeys
+    }
+
+    return normalizedDates != existing.dates || normalizedSlotKeys != existing.slotKeys
+}
+
+func hasSlotVoteChanges(
+    payload: MessagePayload,
+    selfSenderId: String,
+    wholeDayDates: Set<String>,
+    selectedSlotKeys: Set<String>
+) -> Bool {
+    let existing = existingVoteState(payload: payload, selfSenderId: selfSenderId)
+    return wholeDayDates != existing.dates || selectedSlotKeys != existing.slotKeys
+}
+
 /// Resolves the current user's color, initial, and the updated participants list.
 /// If the user is not yet in `payload.participants`, they are appended.
 func resolvedSelfIdentity(
