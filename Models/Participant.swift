@@ -9,11 +9,13 @@ struct Participant: Codable, Equatable {
     // Fixed palette assigned by thread position (matches MVP participant colors)
     static let palette: [String] = [
         "#FF6B9D",  // pink
-        "#34C759",  // green
-        "#007AFF",  // blue
         "#FF9F0A",  // orange
         "#BF5AF2",  // purple
         "#FF375F",  // red
+        "#FFD60A",  // yellow
+        "#64D2FF",  // cyan
+        "#FF8A65",  // coral
+        "#A97142",  // brown
     ]
 
     static func color(for index: Int) -> String {
