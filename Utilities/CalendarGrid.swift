@@ -105,6 +105,30 @@ func monthName(_ month: Int, year: Int? = nil) -> String {
     return formatter.string(from: date)
 }
 
+/// Calendar span for inclusive ISO day endpoints, e.g. `April 21`, `April 21–28`, `April 30 – May 4`.
+func monthDayRangeLabel(startIso: String, endIso: String) -> String {
+    guard let (sy, sm, sd) = parseISODate(startIso),
+          let (ey, em, ed) = parseISODate(endIso) else { return "" }
+
+    let startMonth = monthName(sm, year: sy)
+
+    if startIso == endIso {
+        return "\(startMonth) \(sd)"
+    }
+
+    if sy == ey && sm == em {
+        return "\(startMonth) \(sd)–\(ed)"
+    }
+
+    let endMonth = monthName(em, year: ey)
+
+    if sy == ey {
+        return "\(startMonth) \(sd) – \(endMonth) \(ed)"
+    }
+
+    return "\(startMonth) \(sd), \(sy) – \(endMonth) \(ed), \(ey)"
+}
+
 /// Inclusive list of YYYY-MM-DD strings from `startIso` through `endIso` (gregorian).
 func dateRangeInclusive(startIso: String, endIso: String) -> [String] {
     guard let (sy, sm, sd) = parseISODate(startIso),
@@ -165,8 +189,6 @@ func uniqueMonthYears(fromSortedIsoDates isos: [String]) -> [MonthYear] {
 let longWeekRangeInclusiveDayThreshold = 11
 /// Days-tab selections with at least this many days convert to month + explicit eligible dates on send.
 let longDaysSelectionCountThreshold = 11
-/// Days-tab selections spanning this many distinct calendar months convert to month + explicit eligible dates on send.
-let daysSelectionMultiMonthThreshold = 2
 
 /// Returns the ISO date string for today (YYYY-MM-DD) in the local calendar.
 func todayISODate() -> String {

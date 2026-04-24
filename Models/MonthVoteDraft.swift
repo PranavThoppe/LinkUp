@@ -80,6 +80,18 @@ func parseSlotKey(_ key: String) -> SlotSelection? {
     return SlotSelection(date: String(parts[0]), slotIndex: slotIndex)
 }
 
+func makeHourKey(date: String, slotIndex: Int, hour: Int) -> String {
+    "\(date)#\(slotIndex)#\(hour)"
+}
+
+func parseHourKey(_ key: String) -> HourSelection? {
+    let parts = key.split(separator: "#")
+    guard parts.count == 3,
+          let slotIndex = Int(parts[1]),
+          let hour = Int(parts[2]) else { return nil }
+    return HourSelection(date: String(parts[0]), slotIndex: slotIndex, hour: hour)
+}
+
 func monthSlotSelections(from selectedSlotKeys: Set<String>, allowedDates: Set<String>) -> [SlotSelection] {
     selectedSlotKeys
         .compactMap(parseSlotKey)

@@ -5,14 +5,15 @@ import Foundation
 private func existingVoteState(
     payload: MessagePayload,
     selfSenderId: String
-) -> (dates: Set<String>, slotKeys: Set<String>) {
+) -> (dates: Set<String>, slotKeys: Set<String>, hourKeys: Set<String>) {
     guard let existing = payload.votes.first(where: { $0.senderId == selfSenderId }) else {
-        return ([], [])
+        return ([], [], [])
     }
 
     let existingDates = Set(existing.dates)
     let existingSlotKeys = Set((existing.slots ?? []).map { makeSlotKey(date: $0.date, slotIndex: $0.slotIndex) })
-    return (existingDates, existingSlotKeys)
+    let existingHourKeys = Set((existing.hours ?? []).map { makeHourKey(date: $0.date, slotIndex: $0.slotIndex, hour: $0.hour) })
+    return (existingDates, existingSlotKeys, existingHourKeys)
 }
 
 func hasMonthVoteChanges(
@@ -42,10 +43,13 @@ func hasSlotVoteChanges(
     payload: MessagePayload,
     selfSenderId: String,
     wholeDayDates: Set<String>,
-    selectedSlotKeys: Set<String>
+    selectedSlotKeys: Set<String>,
+    selectedHourKeys: Set<String> = []
 ) -> Bool {
     let existing = existingVoteState(payload: payload, selfSenderId: selfSenderId)
-    return wholeDayDates != existing.dates || selectedSlotKeys != existing.slotKeys
+    return wholeDayDates != existing.dates
+        || selectedSlotKeys != existing.slotKeys
+        || selectedHourKeys != existing.hourKeys
 }
 
 /// Resolves the current user's color, initial, and the updated participants list.
@@ -68,17 +72,19 @@ func resolvedSelfIdentity(
 // MARK: - Slot payload builder (week + days modes)
 
 /// Builds an updated `MessagePayload` for week or days modes, merging the current user's
-/// whole-day availability and per-slot picks into the votes array.
+/// whole-day availability, per-slot picks, and hour-level picks into the votes array.
 ///
 /// - Parameters:
 ///   - wholeDayDates: ISO date strings where the user is available all day.
 ///   - selectedSlotKeys: `"YYYY-MM-DD#slotIndex"` keys for per-slot picks
 ///     (should only include days NOT in `wholeDayDates`; `SlotVoteDraft` enforces this).
+///   - selectedHourKeys: `"YYYY-MM-DD#slotIndex#hour"` keys for hour-level picks.
 func buildUpdatedSlotPayload(
     payload: MessagePayload,
     selfSenderId: String,
     wholeDayDates: Set<String>,
-    selectedSlotKeys: Set<String>
+    selectedSlotKeys: Set<String>,
+    selectedHourKeys: Set<String> = []
 ) -> MessagePayload {
     let (selfColor, selfInitial, updatedParticipants) = resolvedSelfIdentity(
         payload: payload,
@@ -90,6 +96,8 @@ func buildUpdatedSlotPayload(
         guard parts.count == 2, let idx = Int(parts[1]) else { return nil }
         return SlotSelection(date: String(parts[0]), slotIndex: idx)
     }
+
+    let hourSelections: [HourSelection] = selectedHourKeys.sorted().compactMap(parseHourKey)
 
     let sortedWholeDays = wholeDayDates.sorted()
 
@@ -104,6 +112,7 @@ func buildUpdatedSlotPayload(
             senderColor: selfColor,
             dates: sortedWholeDays,
             slots: slots.isEmpty ? nil : slots,
+            hours: hourSelections.isEmpty ? nil : hourSelections,
             updatedAt: Date()
         )
         updatedVotes.append(newVote)

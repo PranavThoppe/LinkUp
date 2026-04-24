@@ -6,6 +6,8 @@ struct ExpandedDaysView: View {
     @ObservedObject var voteDraft: DaysVoteDraft
     let onDone: (MessagePayload) -> Void
 
+    @State private var focusedWindowIndex: Int = 0
+
     private let slotLabels = ["Morn", "Aftn", "Eve", "Night"]
     private let maxDaysPerRow = 5
     private let fixedColWidth: CGFloat = 44
@@ -37,6 +39,22 @@ struct ExpandedDaysView: View {
                             .padding(24)
                     } else {
                         gridCard
+                        SlotHourPickerCard(
+                            dayOptions: hourPickerDayOptions,
+                            focusedDayIso: $voteDraft.focusedDayIso,
+                            activeSlotIndices: voteDraft.activeSlotIndices(for: voteDraft.focusedDayIso),
+                            selectedHourKeys: $voteDraft.selectedHourKeys,
+                            slotLabels: slotLabels,
+                            onToggleRange: { slotIdx, start, end, initiallySelected in
+                                voteDraft.toggleHoursInRange(
+                                    date: voteDraft.focusedDayIso,
+                                    slotIndex: slotIdx,
+                                    startHour: start,
+                                    endHour: end,
+                                    initiallySelected: initiallySelected
+                                )
+                            }
+                        )
                     }
 
                     VoterLegendCard(
@@ -48,31 +66,83 @@ struct ExpandedDaysView: View {
             }
         }
         .background(Theme.background)
+        .onAppear {
+            syncWindowAndFocusedDay()
+        }
+        .onChange(of: pollDaysSignature) { _, _ in
+            syncWindowAndFocusedDay()
+        }
+        .onChange(of: hourPickerDayOptionsSignature) { _, _ in
+            syncFocusedDayToHourPickerOptions()
+        }
+        .onChange(of: voteDraft.focusedDayIso) { _, newIso in
+            guard !newIso.isEmpty,
+                  let idx = dayWindows.firstIndex(where: { $0.contains(newIso) }) else { return }
+            focusedWindowIndex = idx
+        }
     }
 
     // MARK: - Grid card
 
     private var gridCard: some View {
-        VStack(spacing: 12) {
-            ForEach(dayChunks.indices, id: \.self) { idx in
-                SlotDayGrid(
-                    days: dayChunks[idx],
-                    slotLabels: slotLabels,
-                    selfWholeDays: voteDraft.selectedDates,
-                    selfSlotKeys: voteDraft.selectedSlotKeys,
-                    otherVoterSlotsByKey: otherVoterSlotsByKey,
-                    otherVoterDaysByIso: otherVoterDaysByIso,
-                    showVoterDots: true,
-                    colWidth: fixedColWidth,
-                    isInteractive: true,
-                    onToggleWholeDay: { voteDraft.toggleWholeDay($0) },
-                    onToggleSlot: { voteDraft.toggleSlot(date: $0, slotIndex: $1) }
-                )
+        VStack(alignment: .leading, spacing: 12) {
+            if dayWindows.count > 1 {
+                windowNavigationRow
             }
+            SlotDayGrid(
+                days: currentWindowDays,
+                slotLabels: slotLabels,
+                selfWholeDays: voteDraft.selectedDates,
+                selfSlotKeys: voteDraft.selectedSlotKeys,
+                otherVoterSlotsByKey: otherVoterSlotsByKey,
+                otherVoterDaysByIso: otherVoterDaysByIso,
+                showVoterDots: true,
+                colWidth: fixedColWidth,
+                isInteractive: true,
+                onToggleWholeDay: { voteDraft.toggleWholeDay($0) },
+                onToggleSlot: { voteDraft.toggleSlot(date: $0, slotIndex: $1) }
+            )
         }
         .padding(16)
         .background(Theme.cardBackground)
         .cornerRadius(16)
+    }
+
+    private var windowNavigationRow: some View {
+        HStack(spacing: 12) {
+            Button {
+                goToPreviousWindow()
+            } label: {
+                Image(systemName: canGoToPreviousWindow ? "chevron.left.circle.fill" : "chevron.left.circle")
+                    .font(.system(size: 22))
+                    .foregroundColor(canGoToPreviousWindow ? Theme.primaryBlue : Theme.textSecondary.opacity(0.4))
+            }
+            .buttonStyle(.plain)
+            .disabled(!canGoToPreviousWindow)
+
+            Text(currentWindowRangeTitle)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(Theme.textSecondary)
+                .frame(maxWidth: .infinity)
+
+            Button {
+                goToNextWindow()
+            } label: {
+                Image(systemName: canGoToNextWindow ? "chevron.right.circle.fill" : "chevron.right.circle")
+                    .font(.system(size: 22))
+                    .foregroundColor(canGoToNextWindow ? Theme.primaryBlue : Theme.textSecondary.opacity(0.4))
+            }
+            .buttonStyle(.plain)
+            .disabled(!canGoToNextWindow)
+        }
+    }
+
+    private var canGoToPreviousWindow: Bool {
+        !dayWindows.isEmpty && focusedWindowIndex > 0
+    }
+
+    private var canGoToNextWindow: Bool {
+        !dayWindows.isEmpty && focusedWindowIndex < dayWindows.count - 1
     }
 
     // MARK: - Toolbar
@@ -82,7 +152,8 @@ struct ExpandedDaysView: View {
             payload: payload,
             selfSenderId: selfSenderId,
             wholeDayDates: voteDraft.selectedDates,
-            selectedSlotKeys: voteDraft.selectedSlotKeys
+            selectedSlotKeys: voteDraft.selectedSlotKeys,
+            selectedHourKeys: voteDraft.selectedHourKeys
         )
         return HStack(alignment: .center) {
             toolbarLeading
@@ -92,7 +163,8 @@ struct ExpandedDaysView: View {
                     payload: payload,
                     selfSenderId: selfSenderId,
                     wholeDayDates: voteDraft.selectedDates,
-                    selectedSlotKeys: voteDraft.selectedSlotKeys
+                    selectedSlotKeys: voteDraft.selectedSlotKeys,
+                    selectedHourKeys: voteDraft.selectedHourKeys
                 ))
             }
             .font(.system(size: 17, weight: .semibold))
@@ -180,11 +252,85 @@ struct ExpandedDaysView: View {
         (payload.schedule.specificDates ?? []).sorted()
     }
 
-    private var dayChunks: [[String]] {
+    private var pollDaysSignature: String {
+        dayColumns.joined(separator: "|")
+    }
+
+    private var hourPickerDayOptions: [String] {
+        let linked = Set(DaysVoteDraft.linkedDayOptions(pollDays: dayColumns, votes: payload.votes))
+        return dayColumns.filter { linked.contains($0) || selfVotedDays.contains($0) }
+    }
+
+    private var hourPickerDayOptionsSignature: String {
+        hourPickerDayOptions.joined(separator: "|")
+    }
+
+    private var selfVotedDays: Set<String> {
+        var days = Set(voteDraft.selectedDates)
+        for key in voteDraft.selectedSlotKeys {
+            if let slot = parseSlotKey(key) {
+                days.insert(slot.date)
+            }
+        }
+        for key in voteDraft.selectedHourKeys {
+            if let hour = parseHourKey(key) {
+                days.insert(hour.date)
+            }
+        }
+        return days
+    }
+
+    private var dayWindows: [[String]] {
         stride(from: 0, to: dayColumns.count, by: maxDaysPerRow).map { start in
             let end = min(start + maxDaysPerRow, dayColumns.count)
             return Array(dayColumns[start..<end])
         }
+    }
+
+    private var currentWindowDays: [String] {
+        guard focusedWindowIndex >= 0, focusedWindowIndex < dayWindows.count else { return [] }
+        return dayWindows[focusedWindowIndex]
+    }
+
+    private var currentWindowRangeTitle: String {
+        let days = currentWindowDays
+        guard let first = days.first, let last = days.last else { return "" }
+        return monthDayRangeLabel(startIso: first, endIso: last)
+    }
+
+    private func syncWindowAndFocusedDay() {
+        voteDraft.syncFocusedDayWithPollDays(dayColumns)
+        syncFocusedDayToHourPickerOptions()
+        if let idx = dayWindows.firstIndex(where: { $0.contains(voteDraft.focusedDayIso) }) {
+            focusedWindowIndex = idx
+        } else {
+            focusedWindowIndex = 0
+            voteDraft.focusedDayIso = dayWindows.first?.first ?? ""
+        }
+    }
+
+    private func syncFocusedDayToHourPickerOptions() {
+        let options = hourPickerDayOptions
+        guard !options.isEmpty else { return }
+        if !options.contains(voteDraft.focusedDayIso) {
+            voteDraft.focusedDayIso = options[0]
+        }
+    }
+
+    private func goToPreviousWindow() {
+        let windows = dayWindows
+        guard canGoToPreviousWindow else { return }
+        focusedWindowIndex -= 1
+        voteDraft.focusedDayIso = windows[focusedWindowIndex][0]
+        syncFocusedDayToHourPickerOptions()
+    }
+
+    private func goToNextWindow() {
+        let windows = dayWindows
+        guard canGoToNextWindow else { return }
+        focusedWindowIndex += 1
+        voteDraft.focusedDayIso = windows[focusedWindowIndex][0]
+        syncFocusedDayToHourPickerOptions()
     }
 
     private var otherVoterSlotsByKey: [String: [String]] {

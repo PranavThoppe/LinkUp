@@ -164,10 +164,8 @@ struct CompactView: View {
 
         if draft.selectedTab == .days, !draft.selectedDatesIso.isEmpty {
             let sortedUnique = Array(Set(draft.selectedDatesIso)).sorted()
-            let monthCount = uniqueMonthYears(fromSortedIsoDates: sortedUnique).count
             let shouldConvertToMonth =
                 sortedUnique.count >= longDaysSelectionCountThreshold
-                || monthCount >= daysSelectionMultiMonthThreshold
             if shouldConvertToMonth {
                 let months = uniqueMonthYears(fromSortedIsoDates: sortedUnique)
                 if !months.isEmpty {

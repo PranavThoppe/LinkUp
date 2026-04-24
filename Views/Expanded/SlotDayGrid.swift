@@ -10,8 +10,8 @@ import SwiftUI
 ///
 /// `colWidth` drives the column sizing:
 ///   - `nil` → each column expands proportionally (flex-1, good for ≤5 days filling the card width).
-///   - fixed `CGFloat` → each column has that exact width; the parent is expected to wrap in a
-///     horizontal `ScrollView` for wide day sets.
+///   - fixed `CGFloat` → each column has that exact width; total width is gutter + `days.count * colWidth`,
+///     centered in the proposed width (expanded week/days). Parents may still wrap in horizontal `ScrollView` when needed.
 ///
 /// This view is the Swift analogue of MVP's `SlotGrid` component in WeekCard.tsx / DaysCard.tsx.
 struct SlotDayGrid: View {
@@ -31,12 +31,30 @@ struct SlotDayGrid: View {
     var onToggleSlot: ((String, Int) -> Void)? = nil
 
     private let labelWidth: CGFloat = 40
+    /// Fixed gap between the slot row label text and the first day column (not absorbed into label width).
+    private let slotAxisGap: CGFloat = 6
+    private var dayColumnLeadingGutter: CGFloat { labelWidth + slotAxisGap }
     private let todayIso: String = todayISODate()
     private let cellHeight: CGFloat = 44
 
     // MARK: - Body
 
     var body: some View {
+        Group {
+            if colWidth != nil {
+                HStack(spacing: 0) {
+                    Spacer(minLength: 0)
+                    gridStack
+                        .fixedSize(horizontal: true, vertical: false)
+                    Spacer(minLength: 0)
+                }
+            } else {
+                gridStack
+            }
+        }
+    }
+
+    private var gridStack: some View {
         VStack(spacing: 4) {
             dowRow
             dateRow
@@ -53,7 +71,7 @@ struct SlotDayGrid: View {
 
     private var dowRow: some View {
         HStack(spacing: 0) {
-            Spacer().frame(width: labelWidth)
+            Spacer().frame(width: dayColumnLeadingGutter)
             ForEach(days, id: \.self) { iso in
                 let abbr = dowAbbreviation(iso: iso)
                 let isToday = iso == todayIso
@@ -78,7 +96,7 @@ struct SlotDayGrid: View {
 
     private var dateRow: some View {
         HStack(spacing: 0) {
-            Spacer().frame(width: labelWidth)
+            Spacer().frame(width: dayColumnLeadingGutter)
             ForEach(days, id: \.self) { iso in
                 let dayNum = dayNumber(from: iso)
                 let isToday = iso == todayIso
@@ -121,8 +139,11 @@ struct SlotDayGrid: View {
             Text(slotLabels[slotIdx])
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundColor(Theme.textSecondary)
-                .frame(width: labelWidth, alignment: .trailing)
-                .padding(.trailing, 6)
+                .frame(width: labelWidth, alignment: .leading)
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+
+            Spacer().frame(width: slotAxisGap)
 
             ForEach(days, id: \.self) { iso in
                 slotCell(iso: iso, slotIdx: slotIdx)
@@ -167,7 +188,7 @@ struct SlotDayGrid: View {
 
     private var voterDotsRow: some View {
         HStack(spacing: 0) {
-            Spacer().frame(width: labelWidth)
+            Spacer().frame(width: dayColumnLeadingGutter)
             ForEach(days, id: \.self) { iso in
                 let colors = otherVoterDaysByIso[iso] ?? []
                 VoterDots(colors: colors, maxVisible: 3)
