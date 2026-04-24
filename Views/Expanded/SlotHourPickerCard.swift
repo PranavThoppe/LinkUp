@@ -145,13 +145,11 @@ struct SlotHourPickerCard: View {
                 ZStack(alignment: .topLeading) {
                     ForEach(hours.indices, id: \.self) { i in
                         let h = hours[i]
-                        if shouldShowTick(index: i, total: count) {
-                            Text(formatHour(h))
-                                .font(.system(size: 10, weight: .medium))
-                                .foregroundColor(Theme.textSecondary)
-                                .fixedSize()
-                                .position(x: (CGFloat(i) + 0.5) * segW, y: 7)
-                        }
+                        Text(formatHour(h))
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(Theme.textSecondary)
+                            .fixedSize()
+                            .position(x: (CGFloat(i) + 0.5) * segW, y: 7)
                     }
                 }
             )
@@ -250,13 +248,6 @@ struct SlotHourPickerCard: View {
                 : Theme.primaryBlue.opacity(0.65)  // selecting: preview blue
         }
         return committed ? Theme.primaryBlue : Theme.cellDefault
-    }
-
-    /// Show a tick label at the first segment, last segment, and roughly every 2 hours in between.
-    private func shouldShowTick(index: Int, total: Int) -> Bool {
-        if total <= 1 { return true }
-        if index == 0 || index == total - 1 { return true }
-        return index % 2 == 0
     }
 
     private func formatHour(_ hour: Int) -> String {
