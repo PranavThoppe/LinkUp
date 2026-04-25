@@ -41,12 +41,17 @@ class MessagesViewController: MSMessagesAppViewController {
 
         selfSenderId = conversation.localParticipantIdentifier.uuidString
 
+        #if DEBUG
+        SupabaseMirrorDebugSmoke.runOnceIfNeeded(selfSenderId: selfSenderId)
+        #endif
+
         if let selectedMessage = conversation.selectedMessage,
            let url = selectedMessage.url {
             switch PayloadCoder.decode(url: url) {
             case .success(let payload):
                 activePayload = payload
                 resetMonthVoteDraftIfNeeded(for: payload)
+                hydrateMergedVotes(scheduleId: payload.schedule.id)
             case .unsupportedVersion(let v):
                 showUnsupportedVersionUI(version: v)
                 return
@@ -95,6 +100,7 @@ class MessagesViewController: MSMessagesAppViewController {
             case .success(let payload):
                 activePayload = payload
                 resetMonthVoteDraftIfNeeded(for: payload)
+                hydrateMergedVotes(scheduleId: payload.schedule.id)
             case .unsupportedVersion(let v):
                 activePayload = nil
                 monthVoteDraft = nil
@@ -237,6 +243,8 @@ class MessagesViewController: MSMessagesAppViewController {
 
         guard let url = try? PayloadCoder.encode(payload) else { return }
 
+        Task.detached { await SupabaseMirror.shared.mirror(payload) }
+
         // Reuse the selected bubble's session only when updating the same schedule
         // (e.g. new votes). A new schedule from the composer has a fresh UUID, so
         // this resolves to a new MSSession and posts a new bubble.
@@ -289,6 +297,8 @@ class MessagesViewController: MSMessagesAppViewController {
     /// replaces the existing bubble in-place via session reuse.
     private func submitVote(_ updatedPayload: MessagePayload, conversation: MSConversation) {
         guard let url = try? PayloadCoder.encode(updatedPayload) else { return }
+
+        Task.detached { await SupabaseMirror.shared.mirror(updatedPayload) }
 
         let message = MSMessage(session: transcriptSession(for: conversation, scheduleId: updatedPayload.schedule.id))
         message.url = url
@@ -367,6 +377,65 @@ class MessagesViewController: MSMessagesAppViewController {
             self.presentUI(for: self.presentationStyle, conversation: conv)
         }
         embed(SwiftUI: setupView)
+    }
+
+    // MARK: - Background DB hydration
+
+    /// Fires a background fetch for the schedule's merged votes from Supabase.
+    /// When the response arrives, merges any votes/participants not already in
+    /// `activePayload` (using per-sender `voteRevision` as the conflict resolver)
+    /// then re-presents the expanded view so the user sees everyone's selections.
+    private func hydrateMergedVotes(scheduleId: UUID) {
+        Task.detached { [weak self] in
+            guard let self else { return }
+            do {
+                let merged = try await SupabaseMirror.shared.fetchMergedState(scheduleId: scheduleId)
+                await MainActor.run { [weak self] in
+                    guard let self,
+                          let current = activePayload,
+                          current.schedule.id == scheduleId,
+                          let conversation = activeConversation else { return }
+
+                    var mergedVotes = current.votes
+                    for dbVote in merged.votes {
+                        if let idx = mergedVotes.firstIndex(where: { $0.senderId == dbVote.senderId }) {
+                            if dbVote.voteRevision >= mergedVotes[idx].voteRevision {
+                                mergedVotes[idx] = dbVote
+                            }
+                        } else {
+                            mergedVotes.append(dbVote)
+                        }
+                    }
+
+                    var mergedParticipants = current.participants
+                    for dbParticipant in merged.participants {
+                        if !mergedParticipants.contains(where: { $0.id == dbParticipant.id }) {
+                            mergedParticipants.append(dbParticipant)
+                        }
+                    }
+
+                    let updatedPayload = MessagePayload(
+                        version: current.version,
+                        schedule: current.schedule,
+                        votes: mergedVotes,
+                        participants: mergedParticipants,
+                        revision: current.revision,
+                        lastWriterId: current.lastWriterId
+                    )
+
+                    activePayload = updatedPayload
+                    monthVoteDraft = nil; monthVoteDraftScheduleId = nil
+                    weekVoteDraft  = nil; weekVoteDraftScheduleId  = nil
+                    daysVoteDraft  = nil; daysVoteDraftScheduleId  = nil
+
+                    if presentationStyle == .expanded {
+                        presentExpandedView(conversation: conversation)
+                    }
+                }
+            } catch {
+                // Non-fatal: bubble state is still valid without the DB merge.
+            }
+        }
     }
 
     // MARK: - Helpers
@@ -459,3 +528,57 @@ class MessagesViewController: MSMessagesAppViewController {
         }
     }
 }
+
+#if DEBUG
+/// One-shot RPC smoke test (Debug builds only). Fixed schedule UUID for SQL checks:
+/// `select * from schedules where id = '550e8400-e29b-41d4-a716-446655440000';`
+private enum SupabaseMirrorDebugSmoke {
+    private static let fixedScheduleId = UUID(uuidString: "550e8400-e29b-41d4-a716-446655440000")!
+    private static var didRun = false
+
+    static func runOnceIfNeeded(selfSenderId: String) {
+        guard !didRun else { return }
+        didRun = true
+
+        let now = Date()
+        let schedule = Schedule(
+            id: fixedScheduleId,
+            creatorId: selfSenderId,
+            mode: .week,
+            title: "Debug mirror smoke test",
+            months: nil,
+            weekRange: DateRange(startIso: "2026-04-21", endIso: "2026-04-27"),
+            specificDates: nil,
+            eligibleDateRange: nil,
+            eligibleSpecificDates: nil,
+            createdAt: now,
+            updatedAt: now,
+            isActive: true
+        )
+
+        let namePrefix = String(selfSenderId.prefix(1)).uppercased()
+        let selfParticipant = Participant(
+            id: selfSenderId,
+            initial: namePrefix,
+            color: Participant.color(for: 0),
+            name: nil
+        )
+
+        let payload = MessagePayload(
+            version: MessagePayload.currentVersion,
+            schedule: schedule,
+            votes: [],
+            participants: [selfParticipant],
+            revision: 0,
+            lastWriterId: selfSenderId
+        )
+
+        print("[SupabaseMirror DEBUG] smoke test: two identical mirror() calls (idempotency). schedule_id=\(fixedScheduleId.uuidString)")
+        Task {
+            await SupabaseMirror.shared.mirror(payload)
+            await SupabaseMirror.shared.mirror(payload)
+            print("[SupabaseMirror DEBUG] smoke test mirror calls finished.")
+        }
+    }
+}
+#endif

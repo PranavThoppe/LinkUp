@@ -128,6 +128,7 @@ func buildUpdatedMonthPayload(
         selfSenderId: selfSenderId
     )
     let existingId = payload.votes.first { $0.senderId == selfSenderId }?.id ?? UUID()
+    let voteRevision = nextVoteRevision(payload: payload, selfSenderId: selfSenderId)
 
     var updatedVotes = payload.votes.filter { $0.senderId != selfSenderId }
     if !sortedDates.isEmpty {
@@ -138,7 +139,8 @@ func buildUpdatedMonthPayload(
             senderColor: selfColor,
             dates: sortedDates,
             slots: slots.isEmpty ? nil : slots,
-            updatedAt: Date()
+            updatedAt: Date(),
+            voteRevision: voteRevision
         )
         updatedVotes.append(newVote)
     }

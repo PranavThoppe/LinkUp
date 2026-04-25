@@ -2,6 +2,11 @@ import Foundation
 
 // MARK: - Shared identity resolution
 
+/// Next per-sender revision for a new or updated vote row (mirror + bubble).
+func nextVoteRevision(payload: MessagePayload, selfSenderId: String) -> Int {
+    (payload.votes.first { $0.senderId == selfSenderId }?.voteRevision ?? 0) + 1
+}
+
 private func existingVoteState(
     payload: MessagePayload,
     selfSenderId: String
@@ -102,6 +107,7 @@ func buildUpdatedSlotPayload(
     let sortedWholeDays = wholeDayDates.sorted()
 
     let existingId = payload.votes.first { $0.senderId == selfSenderId }?.id ?? UUID()
+    let voteRevision = nextVoteRevision(payload: payload, selfSenderId: selfSenderId)
 
     var updatedVotes = payload.votes.filter { $0.senderId != selfSenderId }
     if !sortedWholeDays.isEmpty || !slots.isEmpty {
@@ -113,7 +119,8 @@ func buildUpdatedSlotPayload(
             dates: sortedWholeDays,
             slots: slots.isEmpty ? nil : slots,
             hours: hourSelections.isEmpty ? nil : hourSelections,
-            updatedAt: Date()
+            updatedAt: Date(),
+            voteRevision: voteRevision
         )
         updatedVotes.append(newVote)
     }

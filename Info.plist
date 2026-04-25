@@ -9,5 +9,9 @@
 		<key>NSExtensionPointIdentifier</key>
 		<string>com.apple.message-payload-provider</string>
 	</dict>
+	<key>SUPABASE_ANON_KEY</key>
+	<string>eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFpcmZsZ3dnenNmYWVpa3VzYWNoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcwNTEzNzMsImV4cCI6MjA5MjYyNzM3M30.UFWIJZ-mz8UUn9sQGie4Y6ODR2rL0QbWgDzS-S7bQws</string>
+	<key>SUPABASE_URL</key>
+	<string>https://airflgwgzsfaeikusach.supabase.co</string>
 </dict>
 </plist>
