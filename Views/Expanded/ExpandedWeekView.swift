@@ -95,6 +95,7 @@ struct ExpandedWeekView: View {
                 selfWholeDays: voteDraft.selectedDates,
                 selfSlotKeys: voteDraft.selectedSlotKeys,
                 otherVoterSlotsByKey: otherVoterSlotsByKey,
+                totalVoteCountsBySlotKey: totalVoteCountsBySlotKey,
                 otherVoterDaysByIso: otherVoterDaysByIso,
                 showVoterDots: true,
                 colWidth: fixedColWidth,
@@ -331,6 +332,39 @@ struct ExpandedWeekView: View {
             }
         }
         return map
+    }
+
+    private var totalVoteCountsBySlotKey: [String: Int] {
+        let pollDays = Set(dayColumns)
+        var votersBySlot: [String: Set<String>] = [:]
+
+        for vote in payload.votes where vote.senderId != selfSenderId {
+            for slot in vote.slots ?? [] where pollDays.contains(slot.date) {
+                let key = makeSlotKey(date: slot.date, slotIndex: slot.slotIndex)
+                votersBySlot[key, default: []].insert(vote.senderId)
+            }
+            for iso in vote.dates where pollDays.contains(iso) {
+                for slotIdx in 0..<slotLabels.count {
+                    let key = makeSlotKey(date: iso, slotIndex: slotIdx)
+                    votersBySlot[key, default: []].insert(vote.senderId)
+                }
+            }
+        }
+
+        for iso in voteDraft.selectedDates where pollDays.contains(iso) {
+            for slotIdx in 0..<slotLabels.count {
+                let key = makeSlotKey(date: iso, slotIndex: slotIdx)
+                votersBySlot[key, default: []].insert(selfSenderId)
+            }
+        }
+        for key in voteDraft.selectedSlotKeys {
+            if let slot = parseSlotKey(key), pollDays.contains(slot.date) {
+                let normalizedKey = makeSlotKey(date: slot.date, slotIndex: slot.slotIndex)
+                votersBySlot[normalizedKey, default: []].insert(selfSenderId)
+            }
+        }
+
+        return votersBySlot.mapValues(\.count)
     }
 
     private var otherVoterDaysByIso: [String: [String]] {

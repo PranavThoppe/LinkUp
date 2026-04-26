@@ -259,11 +259,10 @@ struct ExpandedCalendarView: View {
     private func expandedInteractiveDayCell(iso: String, dayNumber: Int) -> some View {
         let isSelf = voteDraft.selectedDates.contains(iso)
         let otherColors = otherVoterColorsByDate[iso] ?? []
-        let hasOthers = !otherColors.isEmpty
-        let baseFill: Color = hasOthers
-            ? VoteHeatmap.color(for: otherColors.count, maxCount: maxOtherVotes)
+        let totalVotes = totalVoteCount(for: iso)
+        let fill: Color = totalVotes > 0
+            ? VoteHeatmap.color(for: totalVotes, maxCount: persistedMaxDateVotes)
             : Theme.cellDefault
-        let fill: Color = (isSelf && !hasOthers) ? Theme.voteGreenHigh : baseFill
 
         Button {
             voteDraft.toggleDate(iso)
@@ -394,10 +393,25 @@ struct ExpandedCalendarView: View {
         return map
     }
 
-    private var maxOtherVotes: Int {
+    private func totalVoteCount(for iso: String) -> Int {
+        let otherCount = otherVoterColorsByDate[iso]?.count ?? 0
+        let selfCount = voteDraft.selectedDates.contains(iso) ? 1 : 0
+        return otherCount + selfCount
+    }
+
+    /// Stable calendar normalization baseline: persisted payload votes only (matches transcript behavior).
+    /// Live draft taps can increase per-day `totalVoteCount` but do not move this scale.
+    private var persistedMaxDateVotes: Int {
         let allowed = scheduleEligiblePollDates
-        let relevant = otherVoterColorsByDate.filter { allowed == nil || allowed!.contains($0.key) }
-        return max(relevant.values.map(\.count).max() ?? 0, 1)
+        var persistedVoteCountByDate: [String: Int] = [:]
+
+        for vote in payload.votes {
+            for iso in vote.dates where allowed == nil || allowed!.contains(iso) {
+                persistedVoteCountByDate[iso, default: 0] += 1
+            }
+        }
+
+        return max(persistedVoteCountByDate.values.max() ?? 0, 1)
     }
 
     /// Other participants' slot votes for the focused legend day (excludes self so heatmap + ring match the calendar).

@@ -21,6 +21,9 @@ struct SlotDayGrid: View {
     let selfSlotKeys: Set<String>
     /// Per-slot voter colors from OTHER participants (excluding self), keyed `"date#slotIndex"`.
     let otherVoterSlotsByKey: [String: [String]]
+    /// Total per-slot vote counts used for heatmap intensity (others + optional live self draft).
+    /// When empty, heat falls back to `otherVoterSlotsByKey` behavior.
+    var totalVoteCountsBySlotKey: [String: Int] = [:]
     /// Other-participant colors per ISO date, used for the voter-dots row.
     let otherVoterDaysByIso: [String: [String]]
     var showVoterDots: Bool = false
@@ -155,12 +158,18 @@ struct SlotDayGrid: View {
     private func slotCell(iso: String, slotIdx: Int) -> some View {
         let key = "\(iso)#\(slotIdx)"
         let otherColors = otherVoterSlotsByKey[key] ?? []
-        let maxOther = max(otherVoterSlotsByKey.values.map(\.count).max() ?? 0, 1)
         let isSelf = selfCoversSlot(iso: iso, slotIdx: slotIdx)
+        let useTotalCounts = !totalVoteCountsBySlotKey.isEmpty
+        let voteCount = useTotalCounts
+            ? (totalVoteCountsBySlotKey[key] ?? 0)
+            : otherColors.count
+        let maxVotes = useTotalCounts
+            ? max(totalVoteCountsBySlotKey.values.max() ?? 0, 1)
+            : max(otherVoterSlotsByKey.values.map(\.count).max() ?? 0, 1)
 
-        let fill: Color = otherColors.isEmpty
-            ? (isSelf ? Theme.voteGreenHigh : Theme.cellDefault)
-            : VoteHeatmap.color(for: otherColors.count, maxCount: maxOther)
+        let fill: Color = voteCount > 0
+            ? VoteHeatmap.color(for: voteCount, maxCount: maxVotes)
+            : (isSelf ? Theme.voteGreenHigh : Theme.cellDefault)
 
         let cellView = RoundedRectangle(cornerRadius: 8)
             .fill(fill)
