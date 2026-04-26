@@ -2,16 +2,15 @@ import SwiftUI
 
 /// Hour-level time picker shown below the slot grid in week and days modes.
 ///
-/// Displays one "window" per slot the user has voted on for `focusedDayIso`,
-/// navigated with chevrons (mirrors the day-window pattern in ExpandedDaysView).
-/// Each window contains a draggable hour bar spanning that slot's time range.
-/// Only rendered when the user has voted on at least one slot for the focused day.
+/// For the focused day, shows all four slot windows (Morn → Night) so the user can add
+/// optional hour detail in any slot without changing main grid slot votes.
+/// Navigated with chevrons (mirrors the day-window pattern in ExpandedDaysView).
 struct SlotHourPickerCard: View {
     let dayOptions: [String]
     @Binding var focusedDayIso: String
-    /// Slot indices (0–3) the user has voted on for `focusedDayIso`, in ascending order.
-    let activeSlotIndices: [Int]
     @Binding var selectedHourKeys: Set<String>
+    /// Per-hour voter colors from OTHER participants, keyed `"date#slotIndex#hour"`.
+    let otherVoterHoursByKey: [String: [String]]
     let slotLabels: [String]
     /// Called when the user finishes a drag gesture.
     /// Args: (slotIndex, startHour, endHour, wasSelectedAtDragStart)
@@ -171,13 +170,21 @@ struct SlotHourPickerCard: View {
                         let key = makeHourKey(date: focusedDayIso, slotIndex: slotIdx, hour: h)
                         let committed = selectedHourKeys.contains(key)
                         let inDrag = isInDragPreview(hour: h)
+                        let otherColors = otherVoterHoursByKey[key] ?? []
                         RoundedRectangle(cornerRadius: 6)
                             .fill(segmentFill(committed: committed, inDrag: inDrag))
                             .overlay {
-                                if inDrag && !dragInitiallySelected {
-                                    RoundedRectangle(cornerRadius: 6)
-                                        .inset(by: 1)
-                                        .stroke(Theme.primaryBlue, lineWidth: 1.5)
+                                ZStack(alignment: .bottom) {
+                                    if committed || (inDrag && !dragInitiallySelected) {
+                                        RoundedRectangle(cornerRadius: 6)
+                                            .inset(by: 1)
+                                            .stroke(Theme.primaryBlue, lineWidth: committed ? 4 : 1.5)
+                                    }
+                                    if !otherColors.isEmpty {
+                                        VoterDots(colors: otherColors, maxVisible: 3)
+                                            .frame(height: 12)
+                                            .padding(.bottom, 2)
+                                    }
                                 }
                             }
                     }
@@ -225,7 +232,7 @@ struct SlotHourPickerCard: View {
     private var canGoNext: Bool { focusedSlotPosition < slotWindows.count - 1 }
 
     private var slotWindows: [Int] {
-        activeSlotIndices.isEmpty ? Array(0..<slotLabels.count) : activeSlotIndices
+        Array(0..<slotLabels.count)
     }
 
     private func resetDrag() {
@@ -247,7 +254,7 @@ struct SlotHourPickerCard: View {
                 ? Theme.cellDefault.opacity(0.4)   // deselecting: fade out
                 : Theme.primaryBlue.opacity(0.65)  // selecting: preview blue
         }
-        return committed ? Theme.primaryBlue : Theme.cellDefault
+        return committed ? Theme.voteGreenHigh : Theme.cellDefault
     }
 
     private func formatHour(_ hour: Int) -> String {

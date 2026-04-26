@@ -104,7 +104,7 @@ struct SlotDayGrid: View {
 
                 let badge = ZStack {
                     Circle()
-                        .fill(isToday ? Theme.primaryBlue : Color.clear)
+                        .fill(Color.clear)
                         .frame(width: 26, height: 26)
                         .overlay {
                             if hasAny && !isToday {

@@ -75,6 +75,7 @@ final class SlotVoteDraft: ObservableObject {
     /// Drag-to-select/deselect a range of hours within a slot.
     /// - If `startHour` was unselected when the gesture began, the entire range is selected.
     /// - If `startHour` was selected when the gesture began, the entire range is deselected.
+    /// Does not add or remove `selectedSlotKeys`; hour picks are optional and independent of the grid.
     func toggleHoursInRange(date iso: String, slotIndex: Int, startHour: Int, endHour: Int, initiallySelected: Bool) {
         let lo = min(startHour, endHour)
         let hi = max(startHour, endHour)
@@ -85,17 +86,6 @@ final class SlotVoteDraft: ObservableObject {
             } else {
                 selectedHourKeys.insert(key)
             }
-        }
-
-        if selectedDates.contains(iso) {
-            return
-        }
-
-        let slotKey = makeSlotKey(date: iso, slotIndex: slotIndex)
-        if hasAnyHours(for: iso, slotIndex: slotIndex) {
-            selectedSlotKeys.insert(slotKey)
-        } else {
-            selectedSlotKeys.remove(slotKey)
         }
     }
 
@@ -112,17 +102,6 @@ final class SlotVoteDraft: ObservableObject {
     func coversSlot(date iso: String, slotIndex: Int) -> Bool {
         if selectedDates.contains(iso) { return true }
         return selectedSlotKeys.contains(makeSlotKey(date: iso, slotIndex: slotIndex))
-    }
-
-    /// Returns the slot indices the user has voted on for the given date,
-    /// in ascending order. Whole-day picks count as all 4 slots.
-    func activeSlotIndices(for iso: String) -> [Int] {
-        if selectedDates.contains(iso) {
-            return Array(0..<Self.slotCount)
-        }
-        return (0..<Self.slotCount).filter { slotIdx in
-            selectedSlotKeys.contains(makeSlotKey(date: iso, slotIndex: slotIdx))
-        }
     }
 
     func hasAnyHours(for iso: String, slotIndex: Int) -> Bool {

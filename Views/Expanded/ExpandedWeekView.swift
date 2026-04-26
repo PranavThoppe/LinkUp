@@ -42,8 +42,8 @@ struct ExpandedWeekView: View {
                         SlotHourPickerCard(
                             dayOptions: hourPickerDayOptions,
                             focusedDayIso: $voteDraft.focusedDayIso,
-                            activeSlotIndices: voteDraft.activeSlotIndices(for: voteDraft.focusedDayIso),
                             selectedHourKeys: $voteDraft.selectedHourKeys,
+                            otherVoterHoursByKey: otherVoterHoursByKey,
                             slotLabels: slotLabels,
                             onToggleRange: { slotIdx, start, end, initiallySelected in
                                 voteDraft.toggleHoursInRange(
@@ -347,11 +347,26 @@ struct ExpandedWeekView: View {
         return map
     }
 
+    private var otherVoterHoursByKey: [String: [String]] {
+        var map: [String: [String]] = [:]
+        for vote in payload.votes where vote.senderId != selfSenderId {
+            for hour in vote.hours ?? [] {
+                let key = makeHourKey(date: hour.date, slotIndex: hour.slotIndex, hour: hour.hour)
+                if !map[key, default: []].contains(vote.senderColor) {
+                    map[key, default: []].append(vote.senderColor)
+                }
+            }
+        }
+        return map
+    }
+
     private var allVoters: [Participant] {
         let ids = Set(payload.votes.map { $0.senderId })
         return payload.participants.filter { ids.contains($0.id) }
     }
 
+    // TODO: Revisit how we summarize votes in the legend — slot counts ignore optional hour picks
+    // and may not reflect nuanced availability; consider hours or a clearer breakdown later.
     private func legendSubtitle(for participant: Participant) -> String {
         let isMe = participant.id == selfSenderId
         let count: Int

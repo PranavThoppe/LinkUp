@@ -110,7 +110,7 @@ func buildUpdatedSlotPayload(
     let voteRevision = nextVoteRevision(payload: payload, selfSenderId: selfSenderId)
 
     var updatedVotes = payload.votes.filter { $0.senderId != selfSenderId }
-    if !sortedWholeDays.isEmpty || !slots.isEmpty {
+    if !sortedWholeDays.isEmpty || !slots.isEmpty || !hourSelections.isEmpty {
         let newVote = Vote(
             id: existingId,
             senderId: selfSenderId,
