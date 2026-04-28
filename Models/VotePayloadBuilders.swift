@@ -66,11 +66,11 @@ func resolvedSelfIdentity(
     if let existing = payload.participants.first(where: { $0.id == selfSenderId }) {
         return (existing.color, existing.initial, payload.participants)
     }
-    let storedName = UserDefaults.standard.string(forKey: "linkup_username")
-    let nameSource = storedName ?? selfSenderId
-    let color = Participant.color(for: payload.participants.count)
+    let cachedName = UserProfileLocalState.cachedDisplayName
+    let nameSource = cachedName ?? selfSenderId
+    let color = UserProfileLocalState.cachedColorHex ?? Participant.color(for: payload.participants.count)
     let initial = String(nameSource.prefix(1)).uppercased()
-    let newParticipant = Participant(id: selfSenderId, initial: initial, color: color, name: storedName)
+    let newParticipant = Participant(id: selfSenderId, initial: initial, color: color, name: cachedName)
     return (color, initial, payload.participants + [newParticipant])
 }
 

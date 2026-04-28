@@ -33,6 +33,32 @@ final class SupabaseMirror {
         let payload: MessagePayload
     }
 
+    private struct UpsertUserProfileRPC: Encodable {
+        let profileId: UUID
+        let displayName: String
+        let colorHex: String
+        let imessageUuid: String?
+
+        enum CodingKeys: String, CodingKey {
+            case profileId = "profile_id"
+            case displayName = "display_name"
+            case colorHex = "color_hex"
+            case imessageUuid = "imessage_uuid"
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var c = encoder.container(keyedBy: CodingKeys.self)
+            try c.encode(profileId, forKey: .profileId)
+            try c.encode(displayName, forKey: .displayName)
+            try c.encode(colorHex, forKey: .colorHex)
+            if let m = imessageUuid {
+                try c.encode(m, forKey: .imessageUuid)
+            } else {
+                try c.encodeNil(forKey: .imessageUuid)
+            }
+        }
+    }
+
     // MARK: - DB row types (PostgREST response, snake_case → camelCase via decoder)
 
     private struct DBVoteRow: Decodable {
@@ -141,6 +167,67 @@ final class SupabaseMirror {
         }
     }
 
+    /// Best-effort `upsert_user_profile` RPC (anon); used after onboarding or when updating global profile fields.
+    func upsertUserProfile(
+        profileId: UUID,
+        displayName: String,
+        colorHex: String,
+        iMessageUUID: String? = nil
+    ) async {
+        guard let base = Self.rpcURL(functionName: "upsert_user_profile") else {
+            log.debug("upsert user profile skipped: invalid or missing SUPABASE_URL")
+            return
+        }
+        guard let key = SupabaseConfig.anonKey else {
+            log.debug("upsert user profile skipped: invalid or missing SUPABASE_ANON_KEY")
+            return
+        }
+
+        let body: UpsertUserProfileRPC = UpsertUserProfileRPC(
+            profileId: profileId,
+            displayName: displayName,
+            colorHex: colorHex,
+            imessageUuid: iMessageUUID
+        )
+        let bodyData: Data
+        do {
+            bodyData = try Self.jsonEncoder.encode(body)
+        } catch {
+            log.error("upsert user profile encode failed: \(error.localizedDescription, privacy: .public)")
+            return
+        }
+
+        var request = URLRequest(url: base)
+        request.httpMethod = "POST"
+        request.httpBody = bodyData
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(key, forHTTPHeaderField: "apikey")
+        request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+        request.setValue("return=minimal", forHTTPHeaderField: "Prefer")
+
+        #if DEBUG
+        print("[SupabaseMirror DEBUG] POST \(base.absoluteString) upsertUserProfile bodyBytes=\(bodyData.count)")
+        #endif
+
+        do {
+            let (data, response) = try await session.data(for: request)
+            guard let http = response as? HTTPURLResponse else {
+                log.error("upsert user profile: non-HTTP response")
+                return
+            }
+            let bodyDescription = Self.responseBodyDescription(data)
+            #if DEBUG
+            print("[SupabaseMirror DEBUG] upsertUserProfile status=\(http.statusCode) body=\(bodyDescription)")
+            #endif
+            guard (200..<300).contains(http.statusCode) else {
+                log.error("upsert user profile HTTP \(http.statusCode, privacy: .public) body: \(bodyDescription, privacy: .public)")
+                return
+            }
+        } catch {
+            log.error("upsert user profile request failed: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
     // MARK: - Background fetch (merged votes from DB)
 
     /// Fetches all votes and participants for `scheduleId` from the Supabase mirror.
@@ -190,13 +277,17 @@ final class SupabaseMirror {
     // MARK: - URL helpers
 
     private static func rpcURL() -> URL? {
+        rpcURL(functionName: "submit_payload")
+    }
+
+    private static func rpcURL(functionName: String) -> URL? {
         guard let projectURL = SupabaseConfig.projectURL,
               var components = URLComponents(url: projectURL, resolvingAgainstBaseURL: false) else {
             return nil
         }
         var path = components.path
         if path.hasSuffix("/") { path.removeLast() }
-        components.path = path + "/rest/v1/rpc/submit_payload"
+        components.path = path + "/rest/v1/rpc/\(functionName)"
         return components.url
     }
 

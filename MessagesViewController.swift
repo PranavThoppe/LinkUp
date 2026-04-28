@@ -31,8 +31,9 @@ class MessagesViewController: MSMessagesAppViewController {
     }
 
     override func willBecomeActive(with conversation: MSConversation) {
-        print("🔑 storedUsername = \(String(describing: storedUsername))")
         super.willBecomeActive(with: conversation)
+        UserProfileLocalState.applyV1ProfileRolloutStrippingLegacyIfNeeded()
+        print("🔑 storedUsername = \(String(describing: storedUsername))")
 
         guard storedUsername != nil else {
             presentUsernameSetup()
@@ -221,15 +222,16 @@ class MessagesViewController: MSMessagesAppViewController {
             isActive: partialSchedule.isActive
         )
 
-        let name = storedUsername ?? selfSenderId
-        let selfInitial = String(name.prefix(1)).uppercased()
-        let selfColor = Participant.color(for: 0)
+        let cachedName = UserProfileLocalState.cachedDisplayName
+        let nameForInitial = cachedName ?? selfSenderId
+        let selfInitial = String(nameForInitial.prefix(1)).uppercased()
+        let selfColor = UserProfileLocalState.cachedColorHex ?? Participant.color(for: 0)
 
         let selfParticipant = Participant(
             id: selfSenderId,
             initial: selfInitial,
             color: selfColor,
-            name: storedUsername
+            name: cachedName
         )
 
         let payload = MessagePayload(
@@ -366,12 +368,36 @@ class MessagesViewController: MSMessagesAppViewController {
     // MARK: - Username
 
     private var storedUsername: String? {
-        UserDefaults.standard.string(forKey: "linkup_username")
+        UserProfileLocalState.cachedDisplayName ?? UserDefaults.standard.string(forKey: "linkup_username")
     }
 
     private func presentUsernameSetup() {
-        let setupView = UsernameSetupView { [weak self] name in
-            UserDefaults.standard.set(name, forKey: "linkup_username")
+        let prefill = UserProfileLocalState.legacyUsernamePrefill
+        let draftColor = UserProfileLocalState.onboardingDraftColorHex
+        let setupView = UsernameSetupView(initialName: prefill, lockedColorHex: draftColor) { [weak self] name, colorHex in
+            let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return }
+
+            // Keep legacy key temporarily while other call sites still read it.
+            UserDefaults.standard.set(trimmed, forKey: "linkup_username")
+            UserProfileLocalState.cachedDisplayName = trimmed
+            UserProfileLocalState.cachedColorHex = colorHex
+            UserProfileLocalState.onboardingDraftColorHex = nil
+            UserProfileLocalState.clearLegacyUsernamePrefill()
+            let profileId = UserProfileLocalState.linkupProfileId
+
+            let iMessageUUID = self?.activeConversation?.localParticipantIdentifier.uuidString
+            Task.detached {
+                await SupabaseMirror.shared.upsertUserProfile(
+                    profileId: profileId,
+                    displayName: trimmed,
+                    colorHex: colorHex,
+                    iMessageUUID: iMessageUUID
+                )
+            }
+
+            UserProfileLocalState.isProfileOnboardingV1Complete = true
+
             guard let self, let conv = self.activeConversation else { return }
             self.selfSenderId = conv.localParticipantIdentifier.uuidString
             self.presentUI(for: self.presentationStyle, conversation: conv)
