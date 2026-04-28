@@ -7,6 +7,7 @@ struct ExpandedWeekView: View {
     let onDone: (MessagePayload) -> Void
 
     @State private var focusedWindowIndex: Int = 0
+    @State private var showTimeDetails = false
 
     private let slotLabels = ["Morn", "Aftn", "Eve", "Night"]
     private let maxDaysPerRow = 5
@@ -39,28 +40,9 @@ struct ExpandedWeekView: View {
                             .padding(24)
                     } else {
                         gridCard
-                        SlotHourPickerCard(
-                            dayOptions: hourPickerDayOptions,
-                            focusedDayIso: $voteDraft.focusedDayIso,
-                            selectedHourKeys: $voteDraft.selectedHourKeys,
-                            otherVoterHoursByKey: otherVoterHoursByKey,
-                            slotLabels: slotLabels,
-                            onToggleRange: { slotIdx, start, end, initiallySelected in
-                                voteDraft.toggleHoursInRange(
-                                    date: voteDraft.focusedDayIso,
-                                    slotIndex: slotIdx,
-                                    startHour: start,
-                                    endHour: end,
-                                    initiallySelected: initiallySelected
-                                )
-                            }
-                        )
+                        timeDetailsToggleCard
                     }
 
-                    VoterLegendCard(
-                        participants: allVoters,
-                        subtitleForParticipant: legendSubtitle
-                    )
                 }
                 .padding(16)
             }
@@ -68,6 +50,7 @@ struct ExpandedWeekView: View {
         .background(Theme.background)
         .onAppear {
             syncWindowAndFocusedDay()
+            showTimeDetails = !voteDraft.selectedHourKeys.isEmpty
         }
         .onChange(of: pollDaysSignature) { _, _ in
             syncWindowAndFocusedDay()
@@ -135,6 +118,65 @@ struct ExpandedWeekView: View {
             }
             .buttonStyle(.plain)
             .disabled(!canGoToNextWindow)
+        }
+    }
+
+    private var timeDetailsToggleCard: some View {
+        Group {
+            if !dayColumns.isEmpty {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        Text(showTimeDetails ? "Hide Time" : "Edit Times")
+                            .font(.system(size: 15, weight: .semibold))
+                        Spacer()
+                        Image(systemName: showTimeDetails ? "minus" : "plus")
+                            .font(.system(size: 13, weight: .semibold))
+                    }
+                    .foregroundColor(Theme.primaryBlue)
+
+                    if !showTimeDetails {
+                        Text("Optional: refine slot votes by selecting exact hours.")
+                            .font(.system(size: 12))
+                            .foregroundColor(Theme.textSecondary)
+                    }
+
+                    if showTimeDetails {
+                        SlotHourPickerCard(
+                            dayOptions: hourPickerDayOptions,
+                            focusedDayIso: $voteDraft.focusedDayIso,
+                            selectedSlotKeys: voteDraft.selectedSlotKeys,
+                            selectedHourKeys: $voteDraft.selectedHourKeys,
+                            otherVoterHoursByKey: otherVoterHoursByKey,
+                            slotLabels: slotLabels,
+                            onToggleRange: { slotIdx, start, end, initiallySelected in
+                                voteDraft.toggleHoursInRange(
+                                    date: voteDraft.focusedDayIso,
+                                    slotIndex: slotIdx,
+                                    startHour: start,
+                                    endHour: end,
+                                    initiallySelected: initiallySelected
+                                )
+                            }
+                        )
+
+                        VoterLegendCard(
+                            participants: allVoters,
+                            subtitleForParticipant: legendSubtitle
+                        )
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(16)
+                .background(Theme.cardBackground)
+                .cornerRadius(16)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        showTimeDetails.toggle()
+                    }
+                }
+                .accessibilityAddTraits(.isButton)
+            }
         }
     }
 

@@ -8,6 +8,7 @@ import SwiftUI
 struct SlotHourPickerCard: View {
     let dayOptions: [String]
     @Binding var focusedDayIso: String
+    let selectedSlotKeys: Set<String>
     @Binding var selectedHourKeys: Set<String>
     /// Per-hour voter colors from OTHER participants, keyed `"date#slotIndex#hour"`.
     let otherVoterHoursByKey: [String: [String]]
@@ -32,10 +33,6 @@ struct SlotHourPickerCard: View {
     var body: some View {
         if !dayOptions.isEmpty {
             VStack(alignment: .leading, spacing: 12) {
-                Text("Specific times")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(Theme.textSecondary)
-
                 Picker("Day", selection: $focusedDayIso) {
                     ForEach(dayOptions, id: \.self) { iso in
                         Text(dayLabel(iso)).tag(iso)
@@ -58,17 +55,24 @@ struct SlotHourPickerCard: View {
             .cornerRadius(16)
             .onChange(of: slotWindows) { _, newWindows in
                 focusedSlotPosition = min(focusedSlotPosition, max(0, newWindows.count - 1))
+                syncFocusedSlotWithSelection()
                 resetDrag()
             }
             .onChange(of: focusedDayIso) { _, _ in
-                focusedSlotPosition = 0
+                syncFocusedSlotWithSelection()
                 resetDrag()
+            }
+            .onChange(of: selectedSlotKeys) { _, _ in
+                syncFocusedSlotWithSelection()
             }
             .onAppear {
                 clampFocusedDayToOptions()
+                syncFocusedSlotWithSelection()
             }
             .onChange(of: dayOptions) { _, _ in
                 clampFocusedDayToOptions()
+                syncFocusedSlotWithSelection()
+                resetDrag()
             }
         }
     }
@@ -265,8 +269,8 @@ struct SlotHourPickerCard: View {
     }
 
     private func dayLabel(_ iso: String) -> String {
-        guard let parts = transcriptDayColumnParts(iso: iso) else { return iso }
-        return "\(parts.weekday) \(parts.day) · \(monthNameFromIso(iso))"
+        guard let (_, _, day) = parseISODate(iso) else { return iso }
+        return "\(fullWeekdayNameFromIso(iso)) \(day) · \(monthNameFromIso(iso))"
     }
 
     private func monthNameFromIso(_ iso: String) -> String {
@@ -274,10 +278,43 @@ struct SlotHourPickerCard: View {
         return monthName(m)
     }
 
+    private func fullWeekdayNameFromIso(_ iso: String) -> String {
+        guard let (y, m, d) = parseISODate(iso) else { return "" }
+        let calendar = Calendar(identifier: .gregorian)
+        guard let date = calendar.date(from: DateComponents(year: y, month: m + 1, day: d)) else { return "" }
+        let formatter = DateFormatter()
+        formatter.locale = Locale.current
+        formatter.dateFormat = "EEEE"
+        return formatter.string(from: date)
+    }
+
     private func clampFocusedDayToOptions() {
         guard !dayOptions.isEmpty else { return }
         if !dayOptions.contains(focusedDayIso) {
             focusedDayIso = dayOptions[0]
+        }
+    }
+
+    private func syncFocusedSlotWithSelection() {
+        guard !slotWindows.isEmpty else {
+            focusedSlotPosition = 0
+            return
+        }
+
+        let selectedSlotForDay: Int? = selectedHourKeys
+            .compactMap(parseHourKey)
+            .first { $0.date == focusedDayIso }
+            .map(\.slotIndex)
+            ?? selectedSlotKeys
+                .compactMap(parseSlotKey)
+                .first { $0.date == focusedDayIso }
+                .map(\.slotIndex)
+
+        if let selectedSlotForDay,
+           let selectedPosition = slotWindows.firstIndex(of: selectedSlotForDay) {
+            focusedSlotPosition = selectedPosition
+        } else {
+            focusedSlotPosition = min(focusedSlotPosition, slotWindows.count - 1)
         }
     }
 }

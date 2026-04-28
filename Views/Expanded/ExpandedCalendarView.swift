@@ -17,6 +17,7 @@ struct ExpandedCalendarView: View {
     @State private var swipeHintScale: CGFloat = 1
     @State private var swipeHintBright = false
     @State private var swipeHintAttentionGeneration: UInt = 0
+    @State private var showTimeDetails = false
 
     private let collapseSwipeColorThreshold: CGFloat = 56
 
@@ -69,11 +70,11 @@ struct ExpandedCalendarView: View {
                     if !scheduleMonths.isEmpty {
                         monthCard(scheduleMonths[focusedMonthIndex])
                     }
-                    slotsInsightCard
+                    timeDetailsToggleCard
                 }
                 .padding(16)
             }
-            if !voteDraft.sortedDates.isEmpty {
+            if !voteDraft.sortedDates.isEmpty && showTimeDetails {
                 Rectangle()
                     .fill(Theme.cardDivider)
                     .frame(height: 0.5)
@@ -316,10 +317,6 @@ struct ExpandedCalendarView: View {
         Group {
             if !voteDraft.sortedDates.isEmpty {
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("Time slots (all votes)")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(Theme.textSecondary)
-
                     Picker("Day", selection: $voteDraft.focusedDayIso) {
                         ForEach(voteDraft.sortedDates, id: \.self) { iso in
                             Text(slotPickerTitle(iso)).tag(iso)
@@ -338,6 +335,7 @@ struct ExpandedCalendarView: View {
                         otherVoterSlots: legendOtherVoterSlotsByKey,
                         isInteractive: false,
                         orientation: .slotsOnXAxis,
+                        showsDayHeadersInSlotsXAxis: false,
                         onBlockedInteraction: triggerSwipeHintAttention
                     )
                 }
@@ -345,6 +343,44 @@ struct ExpandedCalendarView: View {
                 .padding(16)
                 .background(Theme.cardBackground)
                 .cornerRadius(16)
+            }
+        }
+    }
+
+    private var timeDetailsToggleCard: some View {
+        Group {
+            if !voteDraft.sortedDates.isEmpty {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        Text(showTimeDetails ? "Hide Times" : "Edit Times")
+                            .font(.system(size: 15, weight: .semibold))
+                        Spacer()
+                        Image(systemName: showTimeDetails ? "minus" : "plus")
+                            .font(.system(size: 13, weight: .semibold))
+                    }
+                    .foregroundColor(Theme.primaryBlue)
+
+                    if !showTimeDetails {
+                        Text("Optional: refine your day picks with slot-level voting details.")
+                            .font(.system(size: 12))
+                            .foregroundColor(Theme.textSecondary)
+                    }
+
+                    if showTimeDetails {
+                        slotsInsightCard
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(16)
+                .background(Theme.cardBackground)
+                .cornerRadius(16)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        showTimeDetails.toggle()
+                    }
+                }
+                .accessibilityAddTraits(.isButton)
             }
         }
     }
@@ -463,13 +499,23 @@ struct ExpandedCalendarView: View {
     }
 
     private func slotPickerTitle(_ iso: String) -> String {
-        guard let parts = transcriptDayColumnParts(iso: iso) else { return iso }
-        return "\(parts.weekday) \(parts.day) · \(monthNameFromIso(iso))"
+        guard let (_, _, day) = parseISODate(iso) else { return iso }
+        return "\(fullWeekdayNameFromIso(iso)) \(day) · \(monthNameFromIso(iso))"
     }
 
     private func monthNameFromIso(_ iso: String) -> String {
         guard let (_, m, _) = parseISODate(iso) else { return "" }
         return monthName(m)
+    }
+
+    private func fullWeekdayNameFromIso(_ iso: String) -> String {
+        guard let (y, m, d) = parseISODate(iso) else { return "" }
+        let calendar = Calendar(identifier: .gregorian)
+        guard let date = calendar.date(from: DateComponents(year: y, month: m + 1, day: d)) else { return "" }
+        let formatter = DateFormatter()
+        formatter.locale = Locale.current
+        formatter.dateFormat = "EEEE"
+        return formatter.string(from: date)
     }
 
     private func shortMonthName(_ month: Int) -> String {

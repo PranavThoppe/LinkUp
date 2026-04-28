@@ -18,6 +18,7 @@ struct VoteToggleGrid: View {
     let otherVoterSlots: [String: [String]]
     var isInteractive: Bool = true
     var orientation: VoteGridOrientation = .daysOnXAxis
+    var showsDayHeadersInSlotsXAxis: Bool = true
     /// Called when the user taps a cell while `isInteractive` is false (e.g. to steer them to compact).
     var onBlockedInteraction: (() -> Void)? = nil
 
@@ -60,8 +61,10 @@ struct VoteToggleGrid: View {
     private var slotsXAxisGrid: some View {
         VStack(spacing: 5) {
             HStack(spacing: 3) {
-                Text("")
-                    .frame(width: 64)
+                if showsDayHeadersInSlotsXAxis {
+                    Text("")
+                        .frame(width: 64)
+                }
                 ForEach(0..<slotLabels.count, id: \.self) { slotIdx in
                     Text(slotLabels[slotIdx])
                         .font(.system(size: 11, weight: .semibold))
@@ -73,8 +76,10 @@ struct VoteToggleGrid: View {
 
             ForEach(dayColumns, id: \.self) { iso in
                 HStack(spacing: 3) {
-                    rowHeader(iso: iso)
-                        .frame(width: 64, alignment: .leading)
+                    if showsDayHeadersInSlotsXAxis {
+                        rowHeader(iso: iso)
+                            .frame(width: 64, alignment: .leading)
+                    }
                     ForEach(0..<slotLabels.count, id: \.self) { slotIdx in
                         slotCell(date: iso, slotIndex: slotIdx)
                     }
