@@ -1,5 +1,4 @@
 import SwiftUI
-import UIKit
 
 struct ExpandedCalendarView: View {
     let payload: MessagePayload
@@ -13,10 +12,6 @@ struct ExpandedCalendarView: View {
     @State private var isCollapseAnimationRunning = false
     /// Upward drag on toolbar (points); drives footer hint color before collapse completes.
     @State private var collapseToolbarSwipeMagnitude: CGFloat = 0
-    /// Footer “swipe down” hint: pulses when user taps the read-only vote grid.
-    @State private var swipeHintScale: CGFloat = 1
-    @State private var swipeHintBright = false
-    @State private var swipeHintAttentionGeneration: UInt = 0
     @State private var showTimeDetails = false
 
     private let collapseSwipeColorThreshold: CGFloat = 56
@@ -74,28 +69,12 @@ struct ExpandedCalendarView: View {
                 }
                 .padding(16)
             }
-            if !voteDraft.sortedDates.isEmpty && showTimeDetails {
-                Rectangle()
-                    .fill(Theme.cardDivider)
-                    .frame(height: 0.5)
-                ZStack {
-                    Text("Swipe down to edit times")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundColor(swipeHintBright ? Color.white : Theme.primaryBlue)
-                        .scaleEffect(swipeHintScale)
-                }
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: .infinity)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .offset(y: collapseHintOffset)
-                .background(Theme.background)
-            }
         }
         .background(Theme.background)
         .onAppear {
             clampFocusedMonthIndex()
             voteDraft.syncFocusedDayWithSelection()
+            showTimeDetails = !voteDraft.selectedSlotKeys.isEmpty
             collapseHintOffset = 0
             isCollapseAnimationRunning = false
             collapseToolbarSwipeMagnitude = 0
@@ -328,15 +307,11 @@ struct ExpandedCalendarView: View {
                     VoteToggleGrid(
                         dayColumns: focusedLegendDayColumns,
                         slotLabels: slotLabels,
-                        selectedSlots: Binding(
-                            get: { voteDraft.selectedSlotKeys },
-                            set: { _ in }
-                        ),
+                        selectedSlots: $voteDraft.selectedSlotKeys,
                         otherVoterSlots: legendOtherVoterSlotsByKey,
-                        isInteractive: false,
+                        isInteractive: true,
                         orientation: .slotsOnXAxis,
-                        showsDayHeadersInSlotsXAxis: false,
-                        onBlockedInteraction: triggerSwipeHintAttention
+                        showsDayHeadersInSlotsXAxis: false
                     )
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -382,37 +357,6 @@ struct ExpandedCalendarView: View {
                 }
                 .accessibilityAddTraits(.isButton)
             }
-        }
-    }
-
-    /// Haptic + double pulse on the footer hint when the read-only grid is tapped.
-    private func triggerSwipeHintAttention() {
-        swipeHintAttentionGeneration += 1
-        let generation = swipeHintAttentionGeneration
-
-        func applyPulse(emphasized: Bool) {
-            withAnimation(.spring(response: 0.2, dampingFraction: 0.65)) {
-                swipeHintScale = emphasized ? 1.1 : 1.0
-            }
-            withAnimation(.easeInOut(duration: 0.12)) {
-                swipeHintBright = emphasized
-            }
-        }
-
-        Task { @MainActor in
-            guard generation == swipeHintAttentionGeneration else { return }
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            applyPulse(emphasized: true)
-            try? await Task.sleep(nanoseconds: 135_000_000)
-            guard generation == swipeHintAttentionGeneration else { return }
-            applyPulse(emphasized: false)
-            try? await Task.sleep(nanoseconds: 165_000_000)
-            guard generation == swipeHintAttentionGeneration else { return }
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            applyPulse(emphasized: true)
-            try? await Task.sleep(nanoseconds: 135_000_000)
-            guard generation == swipeHintAttentionGeneration else { return }
-            applyPulse(emphasized: false)
         }
     }
 

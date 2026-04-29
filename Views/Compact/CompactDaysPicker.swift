@@ -68,10 +68,7 @@ struct CompactDaysPicker: View {
                 }
 
                 if selectedDatesIso.isEmpty {
-                    Text("Your chosen days appear below.")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(Theme.messageBubbleBlue)
-                        .padding(.top, 2)
+                    EmptyView()
                 } else {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 6) {

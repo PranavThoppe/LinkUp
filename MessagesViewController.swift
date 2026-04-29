@@ -14,6 +14,7 @@ class MessagesViewController: MSMessagesAppViewController {
     private let composerDraft = ComposerDraft()
     private var monthVoteDraft: MonthVoteDraft?
     private var monthVoteDraftScheduleId: UUID?
+    private var monthVoteDraftPayloadRevision: Int?
     private var weekVoteDraft: WeekVoteDraft?
     private var weekVoteDraftScheduleId: UUID?
     private var daysVoteDraft: DaysVoteDraft?
@@ -60,12 +61,14 @@ class MessagesViewController: MSMessagesAppViewController {
                 activePayload = nil
                 monthVoteDraft = nil
                 monthVoteDraftScheduleId = nil
+                monthVoteDraftPayloadRevision = nil
             }
         } else if conversation.selectedMessage != nil {
             // A non-URL message is selected — not a LinkUp bubble.
             activePayload = nil
             monthVoteDraft = nil
             monthVoteDraftScheduleId = nil
+            monthVoteDraftPayloadRevision = nil
         }
         // When selectedMessage is nil we preserve whatever activePayload was already set.
         // willBecomeActive fires a second time after requestPresentationStyle(.expanded)
@@ -106,17 +109,20 @@ class MessagesViewController: MSMessagesAppViewController {
                 activePayload = nil
                 monthVoteDraft = nil
                 monthVoteDraftScheduleId = nil
+                monthVoteDraftPayloadRevision = nil
                 showUnsupportedVersionUI(version: v)
                 return
             case .notLinkUp:
                 activePayload = nil
                 monthVoteDraft = nil
                 monthVoteDraftScheduleId = nil
+                monthVoteDraftPayloadRevision = nil
             }
         } else {
             activePayload = nil
             monthVoteDraft = nil
             monthVoteDraftScheduleId = nil
+            monthVoteDraftPayloadRevision = nil
         }
 
         switch presentationStyle {
@@ -450,7 +456,7 @@ class MessagesViewController: MSMessagesAppViewController {
                     )
 
                     activePayload = updatedPayload
-                    monthVoteDraft = nil; monthVoteDraftScheduleId = nil
+                    monthVoteDraft = nil; monthVoteDraftScheduleId = nil; monthVoteDraftPayloadRevision = nil
                     weekVoteDraft  = nil; weekVoteDraftScheduleId  = nil
                     daysVoteDraft  = nil; daysVoteDraftScheduleId  = nil
 
@@ -493,12 +499,15 @@ class MessagesViewController: MSMessagesAppViewController {
         if payload.schedule.mode != .month {
             return MonthVoteDraft(payload: payload, selfSenderId: selfSenderId)
         }
-        if let existing = monthVoteDraft, monthVoteDraftScheduleId == payload.schedule.id {
+        if let existing = monthVoteDraft,
+           monthVoteDraftScheduleId == payload.schedule.id,
+           monthVoteDraftPayloadRevision == payload.revision {
             return existing
         }
         let draft = MonthVoteDraft(payload: payload, selfSenderId: selfSenderId)
         monthVoteDraft = draft
         monthVoteDraftScheduleId = payload.schedule.id
+        monthVoteDraftPayloadRevision = payload.revision
         return draft
     }
 
@@ -528,6 +537,10 @@ class MessagesViewController: MSMessagesAppViewController {
             if monthVoteDraftScheduleId != payload.schedule.id {
                 monthVoteDraft = MonthVoteDraft(payload: payload, selfSenderId: selfSenderId)
                 monthVoteDraftScheduleId = payload.schedule.id
+                monthVoteDraftPayloadRevision = payload.revision
+            } else if monthVoteDraftPayloadRevision != payload.revision {
+                monthVoteDraft = MonthVoteDraft(payload: payload, selfSenderId: selfSenderId)
+                monthVoteDraftPayloadRevision = payload.revision
             }
             weekVoteDraft = nil
             weekVoteDraftScheduleId = nil
@@ -536,6 +549,7 @@ class MessagesViewController: MSMessagesAppViewController {
         case .week:
             monthVoteDraft = nil
             monthVoteDraftScheduleId = nil
+            monthVoteDraftPayloadRevision = nil
             if weekVoteDraftScheduleId != payload.schedule.id {
                 weekVoteDraft = WeekVoteDraft(payload: payload, selfSenderId: selfSenderId)
                 weekVoteDraftScheduleId = payload.schedule.id
@@ -545,6 +559,7 @@ class MessagesViewController: MSMessagesAppViewController {
         case .days:
             monthVoteDraft = nil
             monthVoteDraftScheduleId = nil
+            monthVoteDraftPayloadRevision = nil
             weekVoteDraft = nil
             weekVoteDraftScheduleId = nil
             if daysVoteDraftScheduleId != payload.schedule.id {
