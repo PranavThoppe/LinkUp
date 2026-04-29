@@ -211,9 +211,9 @@ struct CompactView: View {
 extension ScheduleMode {
     var displayName: String {
         switch self {
-        case .month: return "Month"
-        case .week:  return "Week"
-        case .days:  return "Days"
+        case .month: return "Calendar"
+        case .week:  return "Range"
+        case .days:  return "Day"
         }
     }
 }

@@ -6,11 +6,25 @@ struct CompactDaysPicker: View {
     @State private var pendingDate: Date = Date()
 
     private var pendingIso: String {
+        isoString(for: pendingDate)
+    }
+
+    private var pendingDateBinding: Binding<Date> {
+        Binding(
+            get: { pendingDate },
+            set: { newDate in
+                pendingDate = newDate
+                addDate(isoString(for: newDate))
+            }
+        )
+    }
+
+    private func isoString(for date: Date) -> String {
         let cal = Calendar.current
         return toISODate(
-            year: cal.component(.year, from: pendingDate),
-            month: cal.component(.month, from: pendingDate) - 1,
-            day: cal.component(.day, from: pendingDate)
+            year: cal.component(.year, from: date),
+            month: cal.component(.month, from: date) - 1,
+            day: cal.component(.day, from: date)
         )
     }
 
@@ -24,7 +38,7 @@ struct CompactDaysPicker: View {
 
             // Date picker centered; Add below (compact popover opens from picker, not over Add)
             VStack(alignment: .center, spacing: 10) {
-                DatePicker("", selection: $pendingDate, displayedComponents: .date)
+                DatePicker("", selection: pendingDateBinding, displayedComponents: .date)
                     .datePickerStyle(.compact)
                     .labelsHidden()
                     .colorScheme(.dark)
