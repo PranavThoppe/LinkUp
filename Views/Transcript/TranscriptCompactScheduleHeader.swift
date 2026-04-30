@@ -91,6 +91,10 @@ struct TranscriptCompactHeaderMetrics: Equatable {
 
     /// Extra card height so the snapshot is not clipped when the header grows (wraps or splits).
     var compactCardHeight: CGFloat {
+        guard hasVisibleHeaderContent else {
+            // No header rendered, so reclaim the baseline header + its bottom padding.
+            return Self.baseCompactCardHeight - Self.defaultBaselineHeaderHeight
+        }
         let delta = max(0, estimatedHeaderBlockHeight - Self.defaultBaselineHeaderHeight)
         // Small bump when many characters even if line estimate is flat (e.g. narrow glyphs).
         let charBump = Self.extraHeightForCharacterLoad(totalHeaderCharacterCount)

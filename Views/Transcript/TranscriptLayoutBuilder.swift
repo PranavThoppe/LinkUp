@@ -16,6 +16,21 @@ enum TranscriptLayoutBuilder {
         return s > 0 ? s : 2
     }
 
+    /// Width used to render the month-mode transcript card.
+    ///
+    /// On standard-width phones the historical 320 pt canvas is kept.
+    /// On wider displays (Pro Max and above, logical width > 390 pt) the canvas
+    /// expands to match the available bubble width so `MSMessageTemplateLayout`
+    /// does not need to upscale the raster image — preventing thin elements like
+    /// strikethrough lines from appearing thicker than intended.
+    private static var adaptiveMonthCardWidth: CGFloat {
+        let screenWidth = UIScreen.main.bounds.width
+        guard screenWidth > 390 else { return monthCardSize.width }
+        // Subtract ~50 pt for typical bubble side margins; cap at 380 pt to
+        // stay comfortably within the bubble safe-area on all current iPhones.
+        return min(screenWidth - 50, 380)
+    }
+
     /// Returns an `MSMessageTemplateLayout` whose image is a pixel-perfect
     /// snapshot of the card view for the given payload.
     ///
@@ -44,8 +59,9 @@ enum TranscriptLayoutBuilder {
     private static func renderCardImage(for payload: MessagePayload, viewerParticipantId: String?) -> UIImage? {
         switch payload.schedule.mode {
         case .month:
+            let cardWidth = adaptiveMonthCardWidth
             let view = CalendarCardView(payload: payload, selfSenderId: viewerParticipantId)
-                .frame(width: monthCardSize.width, height: monthCardSize.height)
+                .frame(width: cardWidth, height: monthCardSize.height)
             return render(view, scale: transcriptSnapshotScale)
         case .week:
             let size = Self.compactCardSize(for: payload)
@@ -67,12 +83,10 @@ enum TranscriptLayoutBuilder {
         return renderer.uiImage
     }
 
-    /// Week/days transcript snapshot size: width fixed, height grows when the header splits or wraps.
+    /// Week/days transcript snapshot size: width fixed, height grows when the header wraps.
     private static func compactCardSize(for payload: MessagePayload) -> CGSize {
-        let isos = payload.compactTranscriptDayColumnIsoStrings()
-        let parts = TranscriptCompactScheduleHeader.monthParts(from: isos)
         let headline = TranscriptCompactScheduleHeader.headline(for: payload.schedule)
-        let metrics = TranscriptCompactHeaderMetrics(headline: headline, monthParts: parts)
+        let metrics = TranscriptCompactHeaderMetrics(headline: headline, monthParts: [])
         return CGSize(width: compactCardWidth, height: metrics.compactCardHeight)
     }
 }

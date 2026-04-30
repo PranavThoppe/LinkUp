@@ -79,7 +79,7 @@ struct DaysCardView: View {
     private var compactHeaderMetrics: TranscriptCompactHeaderMetrics {
         TranscriptCompactHeaderMetrics(
             headline: TranscriptCompactScheduleHeader.headline(for: payload.schedule),
-            monthParts: TranscriptCompactScheduleHeader.monthParts(from: dayColumns)
+            monthParts: []
         )
     }
 
