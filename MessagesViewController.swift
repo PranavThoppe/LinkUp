@@ -271,7 +271,7 @@ class MessagesViewController: MSMessagesAppViewController {
 
     // MARK: - Expanded (voting or creation)
 
-    private func presentExpandedView(conversation: MSConversation) {
+    private func presentExpandedView(conversation: MSConversation, showNewVotesToast: Bool = false) {
         if let payload = activePayload {
             let expandedView = ExpandedView(
                 payload: payload,
@@ -279,6 +279,7 @@ class MessagesViewController: MSMessagesAppViewController {
                 monthVoteDraft: payload.schedule.mode == .month ? monthVoteDraft(for: payload) : nil,
                 weekVoteDraft: payload.schedule.mode == .week ? weekVoteDraft(for: payload) : nil,
                 daysVoteDraft: payload.schedule.mode == .days ? daysVoteDraft(for: payload) : nil,
+                showNewVotesToast: showNewVotesToast,
                 onDone: { [weak self] updatedPayload in
                     self?.submitVote(updatedPayload, conversation: conversation)
                 },
@@ -417,6 +418,7 @@ class MessagesViewController: MSMessagesAppViewController {
     /// When the response arrives, merges any votes/participants not already in
     /// `activePayload` (using per-sender `voteRevision` as the conflict resolver)
     /// then re-presents the expanded view so the user sees everyone's selections.
+    /// If the local user has unsaved edits their draft is preserved and a toast is shown.
     private func hydrateMergedVotes(scheduleId: UUID) {
         Task.detached { [weak self] in
             guard let self else { return }
@@ -455,13 +457,56 @@ class MessagesViewController: MSMessagesAppViewController {
                         lastWriterId: current.lastWriterId
                     )
 
-                    activePayload = updatedPayload
-                    monthVoteDraft = nil; monthVoteDraftScheduleId = nil; monthVoteDraftPayloadRevision = nil
-                    weekVoteDraft  = nil; weekVoteDraftScheduleId  = nil
-                    daysVoteDraft  = nil; daysVoteDraftScheduleId  = nil
+                    // Check whether the local user has in-progress edits that haven't been sent.
+                    // If so, preserve the draft and show a toast instead of wiping their picks.
+                    let hasUnsavedEdits: Bool = {
+                        switch updatedPayload.schedule.mode {
+                        case .month:
+                            guard let draft = self.monthVoteDraft else { return false }
+                            return hasMonthVoteChanges(
+                                payload: updatedPayload,
+                                selfSenderId: self.selfSenderId,
+                                selectedDates: draft.selectedDates,
+                                selectedSlotKeys: draft.selectedSlotKeys
+                            )
+                        case .week:
+                            guard let draft = self.weekVoteDraft else { return false }
+                            return hasSlotVoteChanges(
+                                payload: updatedPayload,
+                                selfSenderId: self.selfSenderId,
+                                wholeDayDates: draft.selectedDates,
+                                selectedSlotKeys: draft.selectedSlotKeys,
+                                selectedHourKeys: draft.selectedHourKeys
+                            )
+                        case .days:
+                            guard let draft = self.daysVoteDraft else { return false }
+                            return hasSlotVoteChanges(
+                                payload: updatedPayload,
+                                selfSenderId: self.selfSenderId,
+                                wholeDayDates: draft.selectedDates,
+                                selectedSlotKeys: draft.selectedSlotKeys,
+                                selectedHourKeys: draft.selectedHourKeys
+                            )
+                        }
+                    }()
 
-                    if presentationStyle == .expanded {
-                        presentExpandedView(conversation: conversation)
+                    activePayload = updatedPayload
+
+                    if hasUnsavedEdits {
+                        // Keep the existing draft objects intact — the user is mid-edit.
+                        // Re-present so other participants' updated votes are visible,
+                        // passing the same draft references (they survive as ObservableObjects).
+                        if presentationStyle == .expanded {
+                            presentExpandedView(conversation: conversation, showNewVotesToast: true)
+                        }
+                    } else {
+                        monthVoteDraft = nil; monthVoteDraftScheduleId = nil; monthVoteDraftPayloadRevision = nil
+                        weekVoteDraft  = nil; weekVoteDraftScheduleId  = nil
+                        daysVoteDraft  = nil; daysVoteDraftScheduleId  = nil
+
+                        if presentationStyle == .expanded {
+                            presentExpandedView(conversation: conversation)
+                        }
                     }
                 }
             } catch {
@@ -535,11 +580,27 @@ class MessagesViewController: MSMessagesAppViewController {
         switch payload.schedule.mode {
         case .month:
             if monthVoteDraftScheduleId != payload.schedule.id {
+                // Different schedule entirely — always reset.
                 monthVoteDraft = MonthVoteDraft(payload: payload, selfSenderId: selfSenderId)
                 monthVoteDraftScheduleId = payload.schedule.id
                 monthVoteDraftPayloadRevision = payload.revision
             } else if monthVoteDraftPayloadRevision != payload.revision {
-                monthVoteDraft = MonthVoteDraft(payload: payload, selfSenderId: selfSenderId)
+                // Same schedule, bubble revision bumped (another user sent).
+                // Only reset if the local user has no unsaved edits.
+                let hasUnsaved = monthVoteDraft.map { draft in
+                    hasMonthVoteChanges(
+                        payload: payload,
+                        selfSenderId: selfSenderId,
+                        selectedDates: draft.selectedDates,
+                        selectedSlotKeys: draft.selectedSlotKeys
+                    )
+                } ?? false
+
+                if !hasUnsaved {
+                    monthVoteDraft = MonthVoteDraft(payload: payload, selfSenderId: selfSenderId)
+                }
+                // Always update the tracked revision so this branch doesn't re-fire on
+                // every subsequent willBecomeActive for the same bubble.
                 monthVoteDraftPayloadRevision = payload.revision
             }
             weekVoteDraft = nil
