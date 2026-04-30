@@ -162,7 +162,7 @@ struct CalendarCardView: View {
                 }
                 Text(verbatim: "\(votedParticipants.count) voted")
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundColor(Theme.textSecondary)
+                    .foregroundColor(.white)
                     .padding(.leading, 2)
             }
         }

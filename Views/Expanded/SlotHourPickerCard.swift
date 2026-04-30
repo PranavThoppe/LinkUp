@@ -62,8 +62,17 @@ struct SlotHourPickerCard: View {
                 syncFocusedSlotWithSelection()
                 resetDrag()
             }
-            .onChange(of: selectedSlotKeys) { _, _ in
-                syncFocusedSlotWithSelection()
+            .onChange(of: selectedSlotKeys) { oldKeys, newKeys in
+                // Jump to a slot that was just toggled ON for the focused day.
+                // Using a diff avoids relying on non-deterministic Set iteration order.
+                let added = newKeys.subtracting(oldKeys)
+                if let addedKey = added.first(where: { $0.hasPrefix("\(focusedDayIso)#") }),
+                   let slot = parseSlotKey(addedKey),
+                   let pos = slotWindows.firstIndex(of: slot.slotIndex) {
+                    focusedSlotPosition = pos
+                }
+                focusedSlotPosition = min(focusedSlotPosition, max(0, slotWindows.count - 1))
+                resetDrag()
             }
             .onAppear {
                 clampFocusedDayToOptions()
@@ -301,14 +310,18 @@ struct SlotHourPickerCard: View {
             return
         }
 
+        // Use .min() to get the lowest slot index deterministically,
+        // avoiding non-deterministic Set iteration order.
         let selectedSlotForDay: Int? = selectedHourKeys
             .compactMap(parseHourKey)
-            .first { $0.date == focusedDayIso }
+            .filter { $0.date == focusedDayIso }
             .map(\.slotIndex)
+            .min()
             ?? selectedSlotKeys
                 .compactMap(parseSlotKey)
-                .first { $0.date == focusedDayIso }
+                .filter { $0.date == focusedDayIso }
                 .map(\.slotIndex)
+                .min()
 
         if let selectedSlotForDay,
            let selectedPosition = slotWindows.firstIndex(of: selectedSlotForDay) {
