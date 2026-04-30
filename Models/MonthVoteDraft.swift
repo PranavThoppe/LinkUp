@@ -54,7 +54,9 @@ final class MonthVoteDraft: ObservableObject {
         }
     }
 
-    func toggleDate(_ isoDate: String) {
+    /// - Parameter alignFocusedDayWithTap: When true (e.g. calendar taps while “Edit Times” is open), move `focusedDayIso`
+    ///   to the day just toggled if it is now selected, or to the latest remaining selected day after a deselect.
+    func toggleDate(_ isoDate: String, alignFocusedDayWithTap: Bool = false) {
         if selectedDates.contains(isoDate) {
             selectedDates.remove(isoDate)
             selectedSlotKeys = selectedSlotKeys.filter { !($0.hasPrefix("\(isoDate)#")) }
@@ -62,7 +64,16 @@ final class MonthVoteDraft: ObservableObject {
             if let allowed = eligiblePollDates, !allowed.contains(isoDate) { return }
             selectedDates.insert(isoDate)
         }
-        syncFocusedDayWithSelection()
+        if alignFocusedDayWithTap {
+            if selectedDates.contains(isoDate) {
+                focusedDayIso = isoDate
+            } else {
+                let dates = sortedDates
+                focusedDayIso = dates.last ?? ""
+            }
+        } else {
+            syncFocusedDayWithSelection()
+        }
     }
 
     var filteredSortedSlots: [SlotSelection] {

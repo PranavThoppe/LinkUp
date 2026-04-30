@@ -245,7 +245,7 @@ struct ExpandedCalendarView: View {
             : Theme.cellDefault
 
         Button {
-            voteDraft.toggleDate(iso)
+            voteDraft.toggleDate(iso, alignFocusedDayWithTap: showTimeDetails)
         } label: {
             VStack(spacing: 2) {
                 ZStack {

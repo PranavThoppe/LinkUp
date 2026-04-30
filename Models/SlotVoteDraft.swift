@@ -10,7 +10,7 @@ final class SlotVoteDraft: ObservableObject {
     /// Per-slot keys in `"YYYY-MM-DD#slotIndex"` format, only for days NOT in `selectedDates`.
     @Published var selectedSlotKeys: Set<String>
     /// Hour-level keys in `"YYYY-MM-DD#slotIndex#hour"` format.
-    /// Independent of slot-level picks — a slot can be voted on without any hour picks.
+    /// A slot can be voted without hour picks; selecting hours for an otherwise unvoted slot adds the slot key too.
     @Published var selectedHourKeys: Set<String>
     /// Poll day used for the hour picker card (week/days modes).
     @Published var focusedDayIso: String = ""
@@ -75,10 +75,13 @@ final class SlotVoteDraft: ObservableObject {
     /// Drag-to-select/deselect a range of hours within a slot.
     /// - If `startHour` was unselected when the gesture began, the entire range is selected.
     /// - If `startHour` was selected when the gesture began, the entire range is deselected.
-    /// Does not add or remove `selectedSlotKeys`; hour picks are optional and independent of the grid.
+    /// Selecting hours on a slot with no prior vote (no whole-day, no slot cell) adds that slot to `selectedSlotKeys`.
     func toggleHoursInRange(date iso: String, slotIndex: Int, startHour: Int, endHour: Int, initiallySelected: Bool) {
         let lo = min(startHour, endHour)
         let hi = max(startHour, endHour)
+        if !initiallySelected, !coversSlot(date: iso, slotIndex: slotIndex) {
+            selectedSlotKeys.insert(makeSlotKey(date: iso, slotIndex: slotIndex))
+        }
         for h in lo...hi {
             let key = makeHourKey(date: iso, slotIndex: slotIndex, hour: h)
             if initiallySelected {
